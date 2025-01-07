@@ -1,0 +1,11 @@
+// src/types/navigation.ts
+export type AuthStackParamList = {
+  Landing: undefined;
+  Login: undefined;
+  Signup: undefined;
+};
+
+export type MainStackParamList = {
+  Home: undefined;
+  // Add other main app screens here
+};
