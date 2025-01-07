@@ -18,6 +18,7 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "expo": "~52.0.23",
+    "expo-secure-store": "^14.0.0",
     "expo-status-bar": "~2.0.0",
     "express": "^4.21.2",
     "mongodb": "^6.12.0",

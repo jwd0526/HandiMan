@@ -10,13 +10,16 @@
 │   │   │   └── FormInput.tsx
 │   │   ├── config
 │   │   │   └── database.ts
+│   │   ├── contexts
+│   │   │   └── AuthContext.tsx
 │   │   ├── models
 │   │   │   └── User.ts
 │   │   ├── screens
-│   │   │   └── auth
-│   │   │       ├── LandingScreen.tsx
-│   │   │       ├── LoginScreen.tsx
-│   │   │       └── SignupScreen.tsx
+│   │   │   ├── auth
+│   │   │   │   ├── LandingScreen.tsx
+│   │   │   │   ├── LoginScreen.tsx
+│   │   │   │   └── SignupScreen.tsx
+│   │   │   └── HomeScreen.tsx
 │   │   ├── services
 │   │   │   └── auth.ts
 │   │   ├── types
@@ -46,46 +49,80 @@
 ├── dev.sh
 └── document-app.sh
 
-14 directories, 29 files
+15 directories, 31 files
 </document_content>
 </document>
 <document index="2">
 <source>golf-tracker/App.tsx</source>
 <document_content>
 // App.tsx
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
 // Screens
 import LandingScreen from './src/screens/auth/LandingScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
+import HomeScreen from './src/screens/HomeScreen';
 
-// Types
-import { AuthStackParamList } from './src/types/navigation';
+const AuthStack = createNativeStackNavigator();
+const MainStack = createNativeStackNavigator();
 
-const Stack = createNativeStackNavigator<AuthStackParamList>();
+// Separate the navigation components
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator
+      id={null}
+      initialRouteName="Landing"
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#fff' }
+      }}
+    >
+      <AuthStack.Screen name="Landing" component={LandingScreen} />
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Signup" component={SignupScreen} />
+    </AuthStack.Navigator>
+  );
+}
 
+function MainNavigator() {
+  return (
+    <MainStack.Navigator
+      id={null}
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#fff' }
+      }}
+    >
+      <MainStack.Screen name="Home" component={HomeScreen} />
+    </MainStack.Navigator>
+  );
+}
+
+// Create a separate Navigation component
+function Navigation() {
+  const { user } = useAuth();
+  
+  return (
+    <NavigationContainer>
+      {user ? <MainNavigator /> : <AuthNavigator />}
+    </NavigationContainer>
+  );
+}
+
+// Main App component
 export default function App() {
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <AuthProvider>
         <StatusBar style="auto" />
-        <Stack.Navigator
-          id={null}
-          initialRouteName="Landing"
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: '#fff' }
-          }}
-        >
-          <Stack.Screen name="Landing" component={LandingScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
-          <Stack.Screen name="Signup" component={SignupScreen} />
-        </Stack.Navigator>
-      </NavigationContainer>
+        <Navigation />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }</document_content>
@@ -99,7 +136,11 @@ export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
 };
-</document_content>
+
+export type MainStackParamList = {
+  Home: undefined;
+  // Add other main app screens here
+};</document_content>
 </document>
 <document index="4">
 <source>golf-tracker/src/types/user.ts</source>
@@ -116,6 +157,38 @@ export interface User {
 </document_content>
 </document>
 <document index="5">
+<source>golf-tracker/src/contexts/AuthContext.tsx</source>
+<document_content>
+// src/contexts/AuthContext.tsx
+import React, { createContext, useState, useContext } from 'react';
+import { User } from '../types/user';
+
+interface AuthContextType {
+  user: User | null;
+  setUser: (user: User | null) => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+
+  return (
+    <AuthContext.Provider value={{ user, setUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}</document_content>
+</document>
+<document index="6">
 <source>golf-tracker/src/config/database.ts</source>
 <document_content>
 // src/config/database.ts
@@ -133,7 +206,7 @@ const connectDB = async () => {
 
 export default connectDB;</document_content>
 </document>
-<document index="6">
+<document index="7">
 <source>golf-tracker/src/models/User.ts</source>
 <document_content>
 // src/models/User.ts
@@ -195,7 +268,7 @@ const User = mongoose.model<IUser>('User', userSchema);
 
 export default User;</document_content>
 </document>
-<document index="7">
+<document index="8">
 <source>golf-tracker/src/screens/auth/SignupScreen.tsx</source>
 <document_content>
 // src/screens/auth/SignupScreen.tsx
@@ -494,7 +567,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="8">
+<document index="9">
 <source>golf-tracker/src/screens/auth/LandingScreen.tsx</source>
 <document_content>
 // src/screens/auth/LandingScreen.tsx
@@ -632,7 +705,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="9">
+<document index="10">
 <source>golf-tracker/src/screens/auth/LoginScreen.tsx</source>
 <document_content>
 // src/screens/auth/LoginScreen.tsx
@@ -653,6 +726,7 @@ import { AuthStackParamList } from '../../types/navigation';
 import { FormInput } from '../../components/FormInput';
 import { FormButton } from '../../components/FormButton';
 import { login, AuthError } from '../../services/auth';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -662,6 +736,7 @@ interface FormErrors {
 }
 
 export default function LoginScreen({ navigation }: Props) {
+  const { setUser } = useAuth(); // Use the auth context
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -699,19 +774,21 @@ export default function LoginScreen({ navigation }: Props) {
     if (!validateForm()) {
       return;
     }
-
+  
     setLoading(true);
     setGeneralError('');
-
+  
     try {
-      const user = await login(email, password);
-      
-      // TODO: Store user data in your app's global state (e.g., Context or Redux)
-      console.log('Login successful:', user);
-      
-      // TODO: Navigate to main app screen
-      // navigation.replace('MainApp');
-      
+      const userData = await login(email, password);
+      // Add any missing required fields to match User type
+      const userWithRequiredFields = {
+        ...userData,
+        password: '', // Add empty password since we don't want to store the actual password
+        createdAt: new Date(userData.createdAt || Date.now()),
+        updatedAt: new Date(userData.updatedAt || Date.now())
+      };
+      console.log('Login successful:', userData);
+      setUser(userWithRequiredFields);
     } catch (err) {
       if (err instanceof AuthError) {
         // Handle specific auth errors
@@ -739,7 +816,6 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   const handleForgotPassword = () => {
-    // TODO: Implement forgot password functionality
     Alert.alert(
       'Reset Password',
       'This feature is coming soon!',
@@ -747,6 +823,7 @@ export default function LoginScreen({ navigation }: Props) {
     );
   };
 
+  // Rest of the component remains the same...
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -879,7 +956,243 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="10">
+<document index="11">
+<source>golf-tracker/src/screens/HomeScreen.tsx</source>
+<document_content>
+import React from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
+
+export default function HomeScreen() {
+  const { user, setUser } = useAuth();
+
+  const handleLogout = () => {
+    setUser(null);
+  };
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2f95dc" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handicapIndex = 14.2; // This would come from actual user data
+  const recentScores = [83, 87, 82, 85, 81]; // This would come from actual user data
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Header Section */}
+        <View style={styles.header}>
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.welcomeText}>Welcome back, </Text>
+            <Text style={styles.nameText}>{user.name || 'Golfer'}</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Handicap Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Current Handicap</Text>
+          <Text style={styles.handicapText}>{handicapIndex}</Text>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>View Details</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.quickActions}>
+          <TouchableOpacity style={styles.quickActionButton}>
+            <Text style={styles.quickActionEmoji}>🏌️</Text>
+            <Text style={styles.quickActionText}>New Round</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionButton}>
+            <Text style={styles.quickActionEmoji}>📊</Text>
+            <Text style={styles.quickActionText}>Statistics</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickActionButton}>
+            <Text style={styles.quickActionEmoji}>🎯</Text>
+            <Text style={styles.quickActionText}>Goals</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Recent Scores */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Recent Scores</Text>
+          <View style={styles.recentScores}>
+            {recentScores.map((score, index) => (
+              <View key={index} style={styles.scoreItem}>
+                <Text style={styles.scoreText}>{score}</Text>
+                <Text style={styles.scoreDate}>
+                  {new Date(Date.now() - index * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                </Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={styles.actionButton}>
+            <Text style={styles.actionButtonText}>View All Rounds</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Tips Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Today's Tip</Text>
+          <Text style={styles.tipText}>
+            "Focus on your tempo during practice swings. A consistent tempo leads to more consistent shots."
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  welcomeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  welcomeText: {
+    fontSize: 20,
+    color: '#666',
+  },
+  nameText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  logoutButton: {
+    padding: 8,
+  },
+  logoutText: {
+    color: '#2f95dc',
+    fontSize: 16,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  handicapText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#2f95dc',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  quickActionButton: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    width: '31%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  quickActionEmoji: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  quickActionText: {
+    fontSize: 14,
+    color: '#333',
+    textAlign: 'center',
+  },
+  recentScores: {
+    marginBottom: 12,
+  },
+  scoreItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  scoreText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  scoreDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  actionButton: {
+    backgroundColor: '#2f95dc',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  tipText: {
+    fontSize: 16,
+    color: '#666',
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
+});</document_content>
+</document>
+<document index="12">
 <source>golf-tracker/src/components/FormButton.tsx</source>
 <document_content>
 // src/components/FormButton.tsx
@@ -956,7 +1269,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="11">
+<document index="13">
 <source>golf-tracker/src/components/FormInput.tsx</source>
 <document_content>
 // src/components/FormInput.tsx
@@ -1010,7 +1323,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="12">
+<document index="14">
 <source>golf-tracker/src/services/auth.ts</source>
 <document_content>
 // src/services/auth.ts

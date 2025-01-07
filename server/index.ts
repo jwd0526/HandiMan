@@ -12,7 +12,12 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'your_mongodb_connection_string';
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:19006', 'http://localhost:19000'], // Add your Expo development URLs
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true
+  }));
 app.use(express.json());
 
 // Connect to MongoDB

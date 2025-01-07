@@ -6,15 +6,24 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function HomeScreen() {
-  const { user, setUser } = useAuth();
+  const { user, logout } = useAuth();
 
-  const handleLogout = () => {
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Error logging out:', error);
+      Alert.alert(
+        'Error',
+        'There was a problem logging out. Please try again.'
+      );
+    }
   };
 
   if (!user) {
