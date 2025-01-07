@@ -1,7 +1,7 @@
-// server/routes/courses.ts
+// server/routes/rounds.ts
 import express, { Request } from 'express';
-import { Course } from 'shared';
-import CourseModel, { ICourse } from '../models/Course';
+import { Round } from 'shared';
+import RoundModel from '../models/Round';
 import { authenticateToken } from '../middleware/auth';
 
 interface AuthRequest extends Request {
@@ -13,73 +13,79 @@ interface AuthRequest extends Request {
 
 const router = express.Router();
 
-function mapCourseToResponse(course: ICourse): Course {
+function mapRoundToResponse(round: any): Round {
   return {
-    _id: course._id.toString(),
-    name: course.name,
-    location: course.location,
-    tees: course.tees,
-    addedBy: course.addedBy.toString(),
-    createdAt: course.createdAt,
-    updatedAt: course.updatedAt
+    _id: round._id.toString(),
+    course: round.course.toString(),
+    date: round.date,
+    tees: round.tees,
+    score: round.score,
+    putts: round.putts,
+    fairways: round.fairways,
+    notes: round.notes,
+    addedBy: round.addedBy.toString(),
+    createdAt: round.createdAt,
+    updatedAt: round.updatedAt
   };
 }
 
 router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { search } = req.query;
-    const query = search ? {
-      $or: [
-        { name: new RegExp(String(search), 'i') },
-        { 'location.city': new RegExp(String(search), 'i') }
-      ]
-    } : {};
-
-    const courses = await CourseModel.find(query).sort({ name: 1 }).limit(50);
-    res.json({
-      success: true,
-      data: courses.map(mapCourseToResponse)
-    });
-  } catch (error) {
-    console.error('Error fetching courses:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching courses'
-    });
-  }
-});
-
-router.post('/', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    if (!req.user?._id) {
+    const userId = req.user?._id;
+    if (!userId) {
       return res.status(401).json({
         success: false,
         message: 'User not authenticated'
       });
     }
 
-    const course = new CourseModel({
-      ...req.body,
-      addedBy: req.user._id
-    });
+    const rounds = await RoundModel.find({ addedBy: userId })
+      .populate('course')
+      .sort({ date: -1 });
 
-    await course.save();
-    res.status(201).json({
+    res.json({
       success: true,
-      data: mapCourseToResponse(course)
+      data: rounds.map(mapRoundToResponse)
     });
   } catch (error) {
-    if ((error as any).code === 11000) {
-      return res.status(400).json({
+    console.error('Error fetching rounds:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching rounds'
+    });
+  }
+});
+
+router.post('/', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: 'A course with this name and location already exists'
+        message: 'User not authenticated'
       });
     }
 
-    console.error('Error creating course:', error);
+    const roundData = {
+      ...req.body,
+      addedBy: userId
+    };
+
+    const round = new RoundModel(roundData);
+    await round.save();
+
+    // Populate the course to get the full course details
+    await round.populate('course');
+
+    res.status(201).json({
+      success: true,
+      data: mapRoundToResponse(round)
+    });
+  } catch (error) {
+    console.error('Error creating round:', error);
     res.status(500).json({
       success: false,
-      message: 'Error creating course'
+      message: 'Error creating round'
     });
   }
 });

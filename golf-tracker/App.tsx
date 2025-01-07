@@ -11,6 +11,7 @@ import LandingScreen from './src/screens/auth/LandingScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import AddRoundScreen from './src/screens/AddRoundScreen';
 
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -43,6 +44,7 @@ function MainNavigator() {
       }}
     >
       <MainStack.Screen name="Home" component={HomeScreen} />
+      <MainStack.Screen name="AddRound" component={AddRoundScreen} />
     </MainStack.Navigator>
   );
 }

@@ -21,9 +21,12 @@
 │   │   │   │   ├── LandingScreen.tsx
 │   │   │   │   ├── LoginScreen.tsx
 │   │   │   │   └── SignupScreen.tsx
+│   │   │   ├── AddRoundScreen.tsx
 │   │   │   └── HomeScreen.tsx
 │   │   ├── services
-│   │   │   └── auth.ts
+│   │   │   ├── auth.ts
+│   │   │   ├── courses.ts
+│   │   │   └── rounds.ts
 │   │   ├── types
 │   │   │   └── navigation.ts
 │   │   └── utils
@@ -67,7 +70,7 @@
 ├── dev.sh
 └── document-app.sh
 
-19 directories, 45 files
+19 directories, 48 files
 </document_content>
 </document>
 <document index="2">
@@ -86,6 +89,7 @@ import LandingScreen from './src/screens/auth/LandingScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import AddRoundScreen from './src/screens/AddRoundScreen';
 
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -118,6 +122,7 @@ function MainNavigator() {
       }}
     >
       <MainStack.Screen name="Home" component={HomeScreen} />
+      <MainStack.Screen name="AddRound" component={AddRoundScreen} />
     </MainStack.Navigator>
   );
 }
@@ -157,7 +162,8 @@ export type AuthStackParamList = {
 
 export type MainStackParamList = {
   Home: undefined;
-  // Add other main app screens here
+  AddRound: undefined;
+  AddCourse: undefined;
 };</document_content>
 </document>
 <document index="4">
@@ -1117,9 +1123,618 @@ const styles = StyleSheet.create({
 });</document_content>
 </document>
 <document index="12">
+<source>golf-tracker/src/screens/AddRoundScreen.tsx</source>
+<document_content>
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { FormInput } from '../components/FormInput';
+import { FormButton } from '../components/FormButton';
+import { createRound } from '../services/rounds';
+import { searchCourses, createCourse } from '../services/courses';
+import { useAuth } from '../contexts/AuthContext';
+import { MainStackParamList } from '../types/navigation';
+import { Course } from 'shared';
+import { X } from 'lucide-react';
+
+type Props = NativeStackScreenProps<MainStackParamList, 'AddRound'>;
+
+// Add Course Modal Component
+function AddCourseModal({ visible, onClose, onAdd }: {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (courseData: { name: string; location: { city?: string; state?: string; country?: string; } }) => Promise<void>;
+}) {
+  const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+
+  const handleSubmit = async () => {
+    // Validate
+    const newErrors: {[key: string]: string} = {};
+    if (!name.trim()) newErrors.name = 'Course name is required';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onAdd({
+        name,
+        location: {
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          country: country.trim() || undefined,
+        }
+      });
+      onClose();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add course');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Add New Course</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <X size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalForm}>
+            <FormInput
+              label="Course Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter course name"
+              error={errors.name}
+              editable={!loading}
+            />
+            <FormInput
+              label="City"
+              value={city}
+              onChangeText={setCity}
+              placeholder="Enter city"
+              editable={!loading}
+            />
+            <FormInput
+              label="State/Province"
+              value={state}
+              onChangeText={setState}
+              placeholder="Enter state/province"
+              editable={!loading}
+            />
+            <FormInput
+              label="Country"
+              value={country}
+              onChangeText={setCountry}
+              placeholder="Enter country"
+              editable={!loading}
+            />
+            
+            <View style={styles.modalButtons}>
+              <FormButton
+                title="Cancel"
+                onPress={onClose}
+                variant="secondary"
+                loading={loading}
+              />
+              <FormButton
+                title="Add Course"
+                onPress={handleSubmit}
+                loading={loading}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// Course Selection Component
+function CourseSelector({ onSelect }: { onSelect: (course: Course) => void }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Course[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const { user } = useAuth();
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    
+    setSearching(true);
+    try {
+      const courses = await searchCourses(searchQuery);
+      setSearchResults(courses);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to search courses');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleAddCourse = async (courseData: {
+    name: string;
+    location: {
+      city?: string;
+      state?: string;
+      country?: string;
+    };
+  }) => {
+    if (!user) throw new Error('User not authenticated');
+
+    const course = await createCourse({
+      ...courseData,
+      addedBy: user._id,
+    });
+    
+    onSelect(course);
+  };
+
+  return (
+    <View>
+      <View style={styles.searchContainer}>
+        <FormInput
+          label="Search Courses"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Enter course name"
+          onSubmitEditing={handleSearch}
+          style={styles.searchInput}
+        />
+        <FormButton
+          title="Search"
+          onPress={handleSearch}
+          loading={searching}
+        />
+      </View>
+
+      {searching ? (
+        <ActivityIndicator style={styles.searchingIndicator} />
+      ) : searchResults.length > 0 ? (
+        <View style={styles.searchResults}>
+          {searchResults.map((course) => (
+            <TouchableOpacity
+              key={course._id}
+              style={styles.courseItem}
+              onPress={() => onSelect(course)}
+            >
+              <Text style={styles.courseName}>{course.name}</Text>
+              {course.location.city && (
+                <Text style={styles.courseLocation}>
+                  {[course.location.city, course.location.state].filter(Boolean).join(', ')}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      <TouchableOpacity
+        style={styles.addCourseButton}
+        onPress={() => setShowAddModal(true)}
+      >
+        <Text style={styles.addCourseText}>+ Add New Course</Text>
+      </TouchableOpacity>
+
+      <AddCourseModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={handleAddCourse}
+      />
+    </View>
+  );
+}
+
+export default function AddRoundScreen({ navigation }: Props) {
+  const { user } = useAuth();
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedTee, setSelectedTee] = useState('');
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [score, setScore] = useState('');
+  const [putts, setPutts] = useState('');
+  const [fairways, setFairways] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+
+  const validateForm = () => {
+    const newErrors: {[key: string]: string} = {};
+    
+    if (!selectedCourse) newErrors.course = 'Please select a course';
+    if (!selectedTee) newErrors.tee = 'Please select tee';
+    if (!score) {
+      newErrors.score = 'Score is required';
+    } else if (isNaN(Number(score)) || Number(score) < 1) {
+      newErrors.score = 'Please enter a valid score';
+    }
+    if (!putts) {
+      newErrors.putts = 'Number of putts is required';
+    } else if (isNaN(Number(putts)) || Number(putts) < 0) {
+      newErrors.putts = 'Please enter a valid number of putts';
+    }
+    if (!fairways) {
+      newErrors.fairways = 'Fairways hit is required';
+    } else if (isNaN(Number(fairways)) || Number(fairways) < 0) {
+      newErrors.fairways = 'Please enter a valid number of fairways';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm() || !user || !selectedCourse) return;
+
+    setLoading(true);
+    try {
+      await createRound({
+        course: selectedCourse._id,
+        date: date.toISOString(),
+        tees: selectedTee,
+        score: Number(score),
+        putts: Number(putts),
+        fairways: Number(fairways),
+        notes: notes.trim() || undefined,
+        addedBy: user._id,
+      });
+
+      Alert.alert('Success', 'Round added successfully', [{
+        text: 'OK',
+        onPress: () => navigation.goBack()
+      }]);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add round');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Add New Round</Text>
+
+          {/* Course Selection */}
+          {!selectedCourse ? (
+            <CourseSelector onSelect={setSelectedCourse} />
+          ) : (
+            <View style={styles.selectedCourse}>
+              <View style={styles.selectedCourseHeader}>
+                <View>
+                  <Text style={styles.selectedCourseName}>{selectedCourse.name}</Text>
+                  {selectedCourse.location.city && (
+                    <Text style={styles.selectedCourseLocation}>
+                      {[selectedCourse.location.city, selectedCourse.location.state]
+                        .filter(Boolean)
+                        .join(', ')}
+                    </Text>
+                  )}
+                </View>
+                <TouchableOpacity
+                  onPress={() => setSelectedCourse(null)}
+                  style={styles.changeCourseButton}
+                >
+                  <Text style={styles.changeCourseText}>Change</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Tee Selection */}
+              <View style={styles.teeSelection}>
+                <Text style={styles.label}>Select Tee</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {selectedCourse.tees.map((tee) => (
+                    <TouchableOpacity
+                      key={tee.name}
+                      style={[
+                        styles.teeButton,
+                        selectedTee === tee.name && styles.teeButtonSelected
+                      ]}
+                      onPress={() => setSelectedTee(tee.name)}
+                    >
+                      <Text style={[
+                        styles.teeButtonText,
+                        selectedTee === tee.name && styles.teeButtonTextSelected
+                      ]}>
+                        {tee.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                {errors.tee && <Text style={styles.errorText}>{errors.tee}</Text>}
+              </View>
+
+              {/* Date Selection */}
+              <TouchableOpacity
+                style={styles.dateButton}
+                onPress={() => setShowDatePicker(true)}
+              >
+                <Text style={styles.label}>Date</Text>
+                <Text style={styles.dateText}>
+                  {date.toLocaleDateString()}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={date}
+                  mode="date"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowDatePicker(false);
+                    if (selectedDate) {
+                      setDate(selectedDate);
+                    }
+                  }}
+                />
+              )}
+
+              {/* Score Inputs */}
+              <View style={styles.scoreInputs}>
+                <FormInput
+                  label="Score"
+                  value={score}
+                  onChangeText={setScore}
+                  keyboardType="numeric"
+                  placeholder="Enter total score"
+                  error={errors.score}
+                  editable={!loading}
+                />
+                <FormInput
+                  label="Putts"
+                  value={putts}
+                  onChangeText={setPutts}
+                  keyboardType="numeric"
+                  placeholder="Total putts"
+                  error={errors.putts}
+                  editable={!loading}
+                />
+                <FormInput
+                  label="Fairways Hit"
+                  value={fairways}
+                  onChangeText={setFairways}
+                  keyboardType="numeric"
+                  placeholder="Fairways hit"
+                  error={errors.fairways}
+                  editable={!loading}
+                />
+              </View>
+
+              {/* Notes */}
+              <FormInput
+                label="Notes"
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="Add notes about your round"
+                multiline
+                numberOfLines={4}
+                editable={!loading}
+              />
+
+              {/* Submit Button */}
+              <FormButton
+                title="Save Round"
+                onPress={handleSubmit}
+                loading={loading}
+              />
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    padding: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 24,
+    color: '#333',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+  },
+  searchingIndicator: {
+    marginVertical: 16,
+  },
+  searchResults: {
+    marginTop: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  courseItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  courseName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  courseLocation: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  addCourseButton: {
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 16,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2f95dc',
+    borderStyle: 'dashed',
+  },
+  addCourseText: {
+    color: '#2f95dc',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalForm: {
+    padding: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 24,
+  },
+  selectedCourse: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  selectedCourseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  selectedCourseName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  selectedCourseLocation: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  changeCourseButton: {
+    padding: 8,
+  },
+  changeCourseText: {
+    color: '#2f95dc',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  teeSelection: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  teeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  teeButtonSelected: {
+    backgroundColor: '#2f95dc',
+    borderColor: '#2f95dc',
+  },
+  teeButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  teeButtonTextSelected: {
+    color: '#fff',
+  },
+  dateButton: {
+    marginBottom: 16,
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  scoreInputs: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 14,
+    marginTop: 4,
+  }
+});</document_content>
+</document>
+<document index="13">
 <source>golf-tracker/src/screens/HomeScreen.tsx</source>
 <document_content>
-import React from 'react';
+// src/screens/HomeScreen.tsx
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -1131,9 +1746,35 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchUserRounds } from '../services/rounds';
+import { Round } from 'shared';
+import { MainStackParamList } from '../types/navigation';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-export default function HomeScreen() {
+type Props = NativeStackScreenProps<MainStackParamList, 'Home'>;
+
+export default function HomeScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRounds = async () => {
+      try {
+        if (user) {
+          const userRounds = await fetchUserRounds(user._id);
+          setRounds(userRounds);
+        }
+      } catch (error) {
+        console.error('Error fetching rounds:', error);
+        Alert.alert('Error', 'Failed to fetch rounds. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRounds();
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -1147,7 +1788,7 @@ export default function HomeScreen() {
     }
   };
 
-  if (!user) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -1158,7 +1799,7 @@ export default function HomeScreen() {
   }
 
   const handicapIndex = 14.2; // This would come from actual user data
-  const recentScores = [83, 87, 82, 85, 81]; // This would come from actual user data
+  const recentScores = rounds.slice(0, 5).map((round) => round.score);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1188,7 +1829,7 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => navigation.navigate('AddRound')}>
             <Text style={styles.quickActionEmoji}>🏌️</Text>
             <Text style={styles.quickActionText}>New Round</Text>
           </TouchableOpacity>
@@ -1205,17 +1846,29 @@ export default function HomeScreen() {
         {/* Recent Scores */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Scores</Text>
-          <View style={styles.recentScores}>
-            {recentScores.map((score, index) => (
-              <View key={index} style={styles.scoreItem}>
-                <Text style={styles.scoreText}>{score}</Text>
-                <Text style={styles.scoreDate}>
-                  {new Date(Date.now() - index * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.actionButton}>
+          {rounds.length === 0 ? (
+            <Text style={styles.noRoundsText}>
+              Add rounds to begin tracking your stats!
+            </Text>
+          ) : (
+            <View style={styles.recentScores}>
+              {recentScores.map((score, index) => (
+                <View key={index} style={styles.scoreItem}>
+                  <Text style={styles.scoreText}>{score}</Text>
+                  <Text style={styles.scoreDate}>
+                    {new Date(rounds[index].date).toLocaleDateString()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              rounds.length === 0 && styles.disabledButton,
+            ]}
+            disabled={rounds.length === 0}
+          >
             <Text style={styles.actionButtonText}>View All Rounds</Text>
           </TouchableOpacity>
         </View>
@@ -1359,9 +2012,18 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 24,
   },
+  noRoundsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
 });</document_content>
 </document>
-<document index="13">
+<document index="14">
 <source>golf-tracker/src/components/FormButton.tsx</source>
 <document_content>
 // src/components/FormButton.tsx
@@ -1438,7 +2100,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="14">
+<document index="15">
 <source>golf-tracker/src/components/FormInput.tsx</source>
 <document_content>
 // src/components/FormInput.tsx
@@ -1492,14 +2154,159 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="15">
+<document index="16">
+<source>golf-tracker/src/services/courses.ts</source>
+<document_content>
+// src/services/courses.ts
+import { Course, CreateCourseInput } from 'shared';
+import { getAuthToken } from './auth';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+
+export async function searchCourses(query: string): Promise<Course[]> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    const response = await fetch(`${API_URL}/courses?search=${encodeURIComponent(query)}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to search courses');
+    }
+
+    const data = await response.json();
+    return data.data as Course[];
+  } catch (error) {
+    console.error('Error searching courses:', error);
+    throw error;
+  }
+}
+
+export async function createCourse(courseData: CreateCourseInput): Promise<Course> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    const response = await fetch(`${API_URL}/courses`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(courseData)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create course');
+    }
+
+    const data = await response.json();
+    return data.data as Course;
+  } catch (error) {
+    console.error('Error creating course:', error);
+    throw error;
+  }
+}</document_content>
+</document>
+<document index="17">
+<source>golf-tracker/src/services/rounds.ts</source>
+<document_content>
+// src/services/rounds.ts
+import { Round, CreateRoundInput } from 'shared';
+import { getAuthToken } from './auth';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+
+export async function fetchUserRounds(userId: string): Promise<Round[]> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    const response = await fetch(`${API_URL}/rounds?userId=${userId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch rounds');
+    }
+
+    const data = await response.json();
+    return data.data.map((round: Round) => ({
+      ...round,
+      date: new Date(round.date)
+    }));
+  } catch (error) {
+    console.error('Error fetching rounds:', error);
+    throw error;
+  }
+}
+
+export async function createRound(roundData: CreateRoundInput): Promise<Round> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    // Ensure date is an ISO string
+    const formattedRoundData = {
+      ...roundData,
+      date: roundData.date instanceof Date 
+        ? roundData.date.toISOString() 
+        : new Date(roundData.date).toISOString()
+    };
+
+    const response = await fetch(`${API_URL}/rounds`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formattedRoundData)
+    });
+
+    if (!response.ok) {
+      // Try to parse error message
+      const errorData = await response.json().catch(() => null);
+      throw new Error(errorData?.message || 'Failed to create round');
+    }
+
+    const data = await response.json();
+    // Convert date to Date object
+    return {
+      ...data.data,
+      date: new Date(data.data.date)
+    };
+  } catch (error) {
+    console.error('Error creating round:', error);
+    throw error;
+  }
+}</document_content>
+</document>
+<document index="18">
 <source>golf-tracker/src/services/auth.ts</source>
 <document_content>
 // src/services/auth.ts
 import * as SecureStore from 'expo-secure-store';
 import { User, CreateUserInput } from 'shared';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+const API_URL = 'http://localhost:3000/api';
 const AUTH_TOKEN_KEY = 'auth_token';
 
 export class AuthError extends Error {
@@ -1624,11 +2431,10 @@ export async function login(email: string, password: string): Promise<User> {
 
     console.log('Transformed user:', transformedUser);
     return transformedUser;
-    
-    } catch (error) {
-      console.error('Login error:', error);
-      throw new AuthError('Error logging in');
-    }
+  } catch (error) {
+    console.error('Login error:', error);
+    throw new AuthError('Login failed');
+  }
 }
 
 export async function logout(): Promise<void> {
@@ -1982,11 +2788,10 @@ app.listen(PORT, () => {
 <source>server/routes/courses.ts</source>
 <document_content>
 // server/routes/courses.ts
-import express from 'express';
-import { Course } from 'shared';
+import express, { Request } from 'express';
+import { Course, CreateCourseInput } from 'shared';
 import CourseModel, { ICourse } from '../models/Course';
 import { authenticateToken } from '../middleware/auth';
-import exp from 'constants';
 
 const router = express.Router();
 
@@ -2025,15 +2830,45 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/', authenticateToken, async (req: Request & { user?: { _id: string } }, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    const courseData: CreateCourseInput = {
+      ...req.body,
+      addedBy: userId
+    };
+
+    const course = new CourseModel(courseData);
+    await course.save();
+
+    res.status(201).json({
+      success: true,
+      data: mapCourseToResponse(course)
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error creating course'
+    });
+  }
+});
+
 export default router;</document_content>
 </document>
 <document index="8">
 <source>server/routes/rounds.ts</source>
 <document_content>
-// server/routes/courses.ts
+// server/routes/rounds.ts
 import express, { Request } from 'express';
-import { Course } from 'shared';
-import CourseModel, { ICourse } from '../models/Course';
+import { Round } from 'shared';
+import RoundModel from '../models/Round';
 import { authenticateToken } from '../middleware/auth';
 
 interface AuthRequest extends Request {
@@ -2045,73 +2880,79 @@ interface AuthRequest extends Request {
 
 const router = express.Router();
 
-function mapCourseToResponse(course: ICourse): Course {
+function mapRoundToResponse(round: any): Round {
   return {
-    _id: course._id.toString(),
-    name: course.name,
-    location: course.location,
-    tees: course.tees,
-    addedBy: course.addedBy.toString(),
-    createdAt: course.createdAt,
-    updatedAt: course.updatedAt
+    _id: round._id.toString(),
+    course: round.course.toString(),
+    date: round.date,
+    tees: round.tees,
+    score: round.score,
+    putts: round.putts,
+    fairways: round.fairways,
+    notes: round.notes,
+    addedBy: round.addedBy.toString(),
+    createdAt: round.createdAt,
+    updatedAt: round.updatedAt
   };
 }
 
 router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { search } = req.query;
-    const query = search ? {
-      $or: [
-        { name: new RegExp(String(search), 'i') },
-        { 'location.city': new RegExp(String(search), 'i') }
-      ]
-    } : {};
-
-    const courses = await CourseModel.find(query).sort({ name: 1 }).limit(50);
-    res.json({
-      success: true,
-      data: courses.map(mapCourseToResponse)
-    });
-  } catch (error) {
-    console.error('Error fetching courses:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching courses'
-    });
-  }
-});
-
-router.post('/', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    if (!req.user?._id) {
+    const userId = req.user?._id;
+    if (!userId) {
       return res.status(401).json({
         success: false,
         message: 'User not authenticated'
       });
     }
 
-    const course = new CourseModel({
-      ...req.body,
-      addedBy: req.user._id
-    });
+    const rounds = await RoundModel.find({ addedBy: userId })
+      .populate('course')
+      .sort({ date: -1 });
 
-    await course.save();
-    res.status(201).json({
+    res.json({
       success: true,
-      data: mapCourseToResponse(course)
+      data: rounds.map(mapRoundToResponse)
     });
   } catch (error) {
-    if ((error as any).code === 11000) {
-      return res.status(400).json({
+    console.error('Error fetching rounds:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching rounds'
+    });
+  }
+});
+
+router.post('/', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
         success: false,
-        message: 'A course with this name and location already exists'
+        message: 'User not authenticated'
       });
     }
 
-    console.error('Error creating course:', error);
+    const roundData = {
+      ...req.body,
+      addedBy: userId
+    };
+
+    const round = new RoundModel(roundData);
+    await round.save();
+
+    // Populate the course to get the full course details
+    await round.populate('course');
+
+    res.status(201).json({
+      success: true,
+      data: mapRoundToResponse(round)
+    });
+  } catch (error) {
+    console.error('Error creating round:', error);
     res.status(500).json({
       success: false,
-      message: 'Error creating course'
+      message: 'Error creating round'
     });
   }
 });
@@ -2134,6 +2975,11 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(1)
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8)
 });
 
 function generateToken(user: IUser): string {
@@ -2193,6 +3039,52 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+router.post('/login', async (req, res) => {
+  try {
+    const validatedData = loginSchema.parse(req.body);
+    const user = await UserModel.findOne({
+      email: { $regex: new RegExp(`^${validatedData.email}$`, 'i') }
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const isValidPassword = await user.comparePassword(validatedData.password);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
+      });
+    }
+
+    const token = generateToken(user);
+    res.json({
+      success: true,
+      data: {
+        user: mapUserToResponse(user),
+        token
+      }
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation error',
+        errors: error.errors
+      });
+    }
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 export default router;</document_content>
 </document>
 <document index="2">
@@ -2212,6 +3104,15 @@ export interface Course extends BaseDocument {
         slope: number;
         numberOfFairways: number;
     }>;
+    addedBy: string;
+}
+export interface CreateCourseInput {
+    name: string;
+    location: {
+        city?: string;
+        state?: string;
+        country?: string;
+    };
     addedBy: string;
 }
 </document_content>
@@ -2247,7 +3148,17 @@ export interface BaseDocument {
 import { BaseDocument } from './base';
 export interface Round extends BaseDocument {
     course: string;
-    date: Date;
+    date: Date | string;
+    tees: string;
+    score: number;
+    putts: number;
+    fairways: number;
+    notes?: string;
+    addedBy: string;
+}
+export interface CreateRoundInput {
+    course: string;
+    date: Date | string;
     tees: string;
     score: number;
     putts: number;
@@ -2284,7 +3195,18 @@ import { BaseDocument } from './base';
 
 export interface Round extends BaseDocument {
   course: string;
-  date: Date;
+  date: Date | string;
+  tees: string;
+  score: number;
+  putts: number;
+  fairways: number;
+  notes?: string;
+  addedBy: string;
+}
+
+export interface CreateRoundInput {
+  course: string;
+  date: Date | string;
   tees: string;
   score: number;
   putts: number;
@@ -2312,6 +3234,16 @@ export interface Course extends BaseDocument {
     slope: number;
     numberOfFairways: number;
   }>;
+  addedBy: string;
+}
+
+export interface CreateCourseInput {
+  name: string;
+  location: {
+    city?: string;
+    state?: string;
+    country?: string;
+  };
   addedBy: string;
 }</document_content>
 </document>

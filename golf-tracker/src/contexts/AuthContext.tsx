@@ -22,15 +22,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
+      setIsLoading(true);
       const token = await getAuthToken();
+      console.log('Stored token:', token ? 'exists' : 'none');
+      
       if (token) {
+        console.log('Validating token...');
         const userData = await validateToken(token);
         if (userData) {
+          console.log('Token valid, user:', userData.email);
           setUser(userData);
+        } else {
+          console.log('Token invalid');
+          await authLogout(); // Clean up invalid token
         }
+      } else {
+        console.log('No token found');
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
+      await authLogout(); // Clean up on error
     } finally {
       setIsLoading(false);
     }

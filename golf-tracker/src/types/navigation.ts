@@ -7,5 +7,6 @@ export type AuthStackParamList = {
 
 export type MainStackParamList = {
   Home: undefined;
-  // Add other main app screens here
+  AddRound: undefined;
+  AddCourse: undefined;
 };

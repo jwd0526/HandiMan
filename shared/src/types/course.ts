@@ -16,3 +16,13 @@ export interface Course extends BaseDocument {
   }>;
   addedBy: string;
 }
+
+export interface CreateCourseInput {
+  name: string;
+  location: {
+    city?: string;
+    state?: string;
+    country?: string;
+  };
+  addedBy: string;
+}

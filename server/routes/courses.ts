@@ -1,9 +1,8 @@
 // server/routes/courses.ts
-import express from 'express';
-import { Course } from 'shared';
+import express, { Request } from 'express';
+import { Course, CreateCourseInput } from 'shared';
 import CourseModel, { ICourse } from '../models/Course';
 import { authenticateToken } from '../middleware/auth';
-import exp from 'constants';
 
 const router = express.Router();
 
@@ -38,6 +37,36 @@ router.get('/', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching courses'
+    });
+  }
+});
+
+router.post('/', authenticateToken, async (req: Request & { user?: { _id: string } }, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    const courseData: CreateCourseInput = {
+      ...req.body,
+      addedBy: userId
+    };
+
+    const course = new CourseModel(courseData);
+    await course.save();
+
+    res.status(201).json({
+      success: true,
+      data: mapCourseToResponse(course)
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error creating course'
     });
   }
 });

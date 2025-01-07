@@ -1,4 +1,5 @@
-import React from 'react';
+// src/screens/HomeScreen.tsx
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -10,9 +11,35 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchUserRounds } from '../services/rounds';
+import { Round } from 'shared';
+import { MainStackParamList } from '../types/navigation';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-export default function HomeScreen() {
+type Props = NativeStackScreenProps<MainStackParamList, 'Home'>;
+
+export default function HomeScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
+  const [rounds, setRounds] = useState<Round[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRounds = async () => {
+      try {
+        if (user) {
+          const userRounds = await fetchUserRounds(user._id);
+          setRounds(userRounds);
+        }
+      } catch (error) {
+        console.error('Error fetching rounds:', error);
+        Alert.alert('Error', 'Failed to fetch rounds. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRounds();
+  }, [user]);
 
   const handleLogout = async () => {
     try {
@@ -26,7 +53,7 @@ export default function HomeScreen() {
     }
   };
 
-  if (!user) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
@@ -37,7 +64,7 @@ export default function HomeScreen() {
   }
 
   const handicapIndex = 14.2; // This would come from actual user data
-  const recentScores = [83, 87, 82, 85, 81]; // This would come from actual user data
+  const recentScores = rounds.slice(0, 5).map((round) => round.score);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -67,7 +94,7 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickActionButton}>
+          <TouchableOpacity style={styles.quickActionButton} onPress={() => navigation.navigate('AddRound')}>
             <Text style={styles.quickActionEmoji}>🏌️</Text>
             <Text style={styles.quickActionText}>New Round</Text>
           </TouchableOpacity>
@@ -84,17 +111,29 @@ export default function HomeScreen() {
         {/* Recent Scores */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Recent Scores</Text>
-          <View style={styles.recentScores}>
-            {recentScores.map((score, index) => (
-              <View key={index} style={styles.scoreItem}>
-                <Text style={styles.scoreText}>{score}</Text>
-                <Text style={styles.scoreDate}>
-                  {new Date(Date.now() - index * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </Text>
-              </View>
-            ))}
-          </View>
-          <TouchableOpacity style={styles.actionButton}>
+          {rounds.length === 0 ? (
+            <Text style={styles.noRoundsText}>
+              Add rounds to begin tracking your stats!
+            </Text>
+          ) : (
+            <View style={styles.recentScores}>
+              {recentScores.map((score, index) => (
+                <View key={index} style={styles.scoreItem}>
+                  <Text style={styles.scoreText}>{score}</Text>
+                  <Text style={styles.scoreDate}>
+                    {new Date(rounds[index].date).toLocaleDateString()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              rounds.length === 0 && styles.disabledButton,
+            ]}
+            disabled={rounds.length === 0}
+          >
             <Text style={styles.actionButtonText}>View All Rounds</Text>
           </TouchableOpacity>
         </View>
@@ -237,5 +276,14 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
     lineHeight: 24,
+  },
+  noRoundsText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginVertical: 16,
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
   },
 });

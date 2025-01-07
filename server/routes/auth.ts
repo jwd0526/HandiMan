@@ -2,10 +2,18 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { User, CreateUserInput } from 'shared';
+import { User } from 'shared';
 import UserModel, { IUser } from '../models/User';
+import { authenticateToken } from '../middleware/auth';
+import { Request } from 'express';
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+  console.log('Auth Route:', req.method, req.path);
+  console.log('Headers:', req.headers);
+  next();
+});
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -19,10 +27,14 @@ const loginSchema = z.object({
 });
 
 function generateToken(user: IUser): string {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not defined');
+  }
+  
   return jwt.sign(
     { userId: user._id.toString(), email: user.email },
-    process.env.JWT_SECRET!,
-    { expiresIn: '24h' }
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' } // Extended token expiration to 30 days
   );
 }
 
@@ -35,6 +47,35 @@ function mapUserToResponse(user: IUser): User {
     updatedAt: user.updatedAt
   };
 }
+
+router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
+  try {
+    // The authenticateToken middleware has already verified the token
+    // and attached the user to the request
+    const user = await UserModel.findById(req.user?._id).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: mapUserToResponse(user),
+        token: req.headers.authorization?.split(' ')[1] // Return the same token
+      }
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
 
 router.post('/signup', async (req, res) => {
   try {
@@ -53,14 +94,17 @@ router.post('/signup', async (req, res) => {
     const user = new UserModel(validatedData);
     await user.save();
 
+    const token = generateToken(user);
+
     res.status(201).json({
       success: true,
       data: {
         user: mapUserToResponse(user),
-        token: generateToken(user)
+        token
       }
     });
   } catch (error) {
+    console.error('Signup error:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
@@ -98,6 +142,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = generateToken(user);
+
     res.json({
       success: true,
       data: {
@@ -106,6 +151,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
@@ -113,7 +159,6 @@ router.post('/login', async (req, res) => {
         errors: error.errors
       });
     }
-    console.error('Login error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
