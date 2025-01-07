@@ -1,8 +1,15 @@
-// src/models/User.ts
+// server/models/User.ts
 import mongoose from 'mongoose';
+import { User } from 'shared';
 import bcrypt from 'bcryptjs';
 
 const SALT_ROUNDS = 10;
+
+export interface IUser extends Omit<User, '_id'> {
+  _id: mongoose.Types.ObjectId;
+  password: string;
+  comparePassword(candidatePassword: string): Promise<boolean>;
+}
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -14,10 +21,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  name: {
-    type: String,
-    required: false,
-  }
+  name: String
 }, {
   timestamps: true
 });
@@ -44,15 +48,6 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   }
 };
 
-export interface IUser extends mongoose.Document {
-  email: string;
-  password: string;
-  name?: string;
-  createdAt: Date;
-  updatedAt: Date;
-  comparePassword(candidatePassword: string): Promise<boolean>;
-}
+const UserModel = mongoose.model<IUser>('User', userSchema);
 
-const User = mongoose.model<IUser>('User', userSchema);
-
-export default User;
+export default UserModel;

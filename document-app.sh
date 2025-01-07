@@ -40,6 +40,10 @@ find server -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.css" \) -not -p
     process_file "$file"
 done
 
+find shared -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.css" \) -not -path "*/node_modules/*" | while read file; do
+    process_file "$file"
+done
+
 echo "</documents>" >> $output_file
 
 echo "Documentation has been written to $output_file"

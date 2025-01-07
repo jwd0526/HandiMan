@@ -1,4 +1,3 @@
-// src/screens/auth/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
   StyleSheet,
@@ -17,6 +16,7 @@ import { FormInput } from '../../components/FormInput';
 import { FormButton } from '../../components/FormButton';
 import { login, AuthError } from '../../services/auth';
 import { useAuth } from '../../contexts/AuthContext';
+import { User } from 'shared';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -26,7 +26,7 @@ interface FormErrors {
 }
 
 export default function LoginScreen({ navigation }: Props) {
-  const { setUser } = useAuth(); // Use the auth context
+  const { setUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,11 +37,9 @@ export default function LoginScreen({ navigation }: Props) {
     const errors: FormErrors = {};
     let isValid = true;
 
-    // Reset errors
     setFormErrors({});
     setGeneralError('');
 
-    // Email validation
     if (!email) {
       errors.email = 'Email is required';
       isValid = false;
@@ -50,7 +48,6 @@ export default function LoginScreen({ navigation }: Props) {
       isValid = false;
     }
 
-    // Password validation
     if (!password) {
       errors.password = 'Password is required';
       isValid = false;
@@ -61,27 +58,24 @@ export default function LoginScreen({ navigation }: Props) {
   };
 
   const handleLogin = async () => {
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
   
     setLoading(true);
     setGeneralError('');
   
     try {
       const userData = await login(email, password);
-      // Add any missing required fields to match User type
-      const userWithRequiredFields = {
-        ...userData,
-        password: '', // Add empty password since we don't want to store the actual password
-        createdAt: new Date(userData.createdAt || Date.now()),
-        updatedAt: new Date(userData.updatedAt || Date.now())
+      const user: User = {
+        _id: userData._id,
+        email: userData.email,
+        name: userData.name,
+        createdAt: new Date(userData.createdAt),
+        updatedAt: new Date(userData.updatedAt)
       };
-      console.log('Login successful:', userData);
-      setUser(userWithRequiredFields);
+      setUser(user);
     } catch (err) {
+      console.error('Login error:', err);
       if (err instanceof AuthError) {
-        // Handle specific auth errors
         if (err.message.toLowerCase().includes('invalid credentials')) {
           setGeneralError('Invalid email or password');
         } else if (err.message.toLowerCase().includes('network')) {
@@ -93,7 +87,6 @@ export default function LoginScreen({ navigation }: Props) {
           setGeneralError(err.message);
         }
       } else {
-        // Handle unexpected errors
         console.error('Login error:', err);
         Alert.alert(
           'Error',
@@ -105,15 +98,6 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert(
-      'Reset Password',
-      'This feature is coming soon!',
-      [{ text: 'OK' }]
-    );
-  };
-
-  // Rest of the component remains the same...
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -159,13 +143,6 @@ export default function LoginScreen({ navigation }: Props) {
               error={formErrors.password}
               editable={!loading}
             />
-
-            <TouchableOpacity 
-              onPress={handleForgotPassword}
-              disabled={loading}
-            >
-              <Text style={styles.forgotPassword}>Forgot Password?</Text>
-            </TouchableOpacity>
 
             <FormButton
               title="Login"
@@ -225,11 +202,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffebeb',
     padding: 10,
     borderRadius: 8,
-  },
-  forgotPassword: {
-    color: '#2f95dc',
-    textAlign: 'right',
-    marginVertical: 16,
   },
   footer: {
     flexDirection: 'row',

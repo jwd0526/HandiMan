@@ -4,7 +4,6 @@ import {
   StyleSheet,
   View,
   Text,
-  Image,
   useWindowDimensions,
   Platform,
 } from 'react-native';

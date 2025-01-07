@@ -4,33 +4,44 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import courseRoutes from './routes/courses';
+import roundRoutes from './routes/rounds';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'your_mongodb_connection_string';
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// Middleware
+if (!MONGODB_URI) {
+  throw new Error('MONGODB_URI must be defined in environment variables');
+}
+
 app.use(cors({
-    origin: ['http://localhost:19006', 'http://localhost:19000'], // Add your Expo development URLs
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    credentials: true
-  }));
+  origin: ['http://localhost:19006', 'http://localhost:19000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  credentials: true
+}));
+
 app.use(express.json());
 
-// Connect to MongoDB
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
 
-// Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/courses', courseRoutes);
+app.use('/api/rounds', roundRoutes);
 
-// Basic health check route
-app.get('/', (req, res) => {
-  res.json({ status: 'OK', message: 'Golf Tracker API is running!' });
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.listen(PORT, () => {

@@ -1,6 +1,6 @@
 // src/contexts/AuthContext.tsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { User } from '../types/user';
+import { User } from 'shared';
 import { getAuthToken, validateToken, logout as authLogout } from '../services/auth';
 
 interface AuthContextType {
@@ -26,14 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         const userData = await validateToken(token);
         if (userData) {
-          // Add required fields to match User type
-          const userWithRequiredFields = {
-            ...userData,
-            password: '', // Add empty password since we don't store the actual password
-            createdAt: new Date(userData.createdAt || Date.now()),
-            updatedAt: new Date(userData.updatedAt || Date.now())
-          };
-          setUser(userWithRequiredFields);
+          setUser(userData);
         }
       }
     } catch (error) {
