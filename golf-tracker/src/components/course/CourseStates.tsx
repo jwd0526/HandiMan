@@ -57,7 +57,8 @@ const styles = StyleSheet.create({
   },
   initialStateContainer: {
     padding: 24,
-    alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#fff',
     borderRadius: 12,
   },

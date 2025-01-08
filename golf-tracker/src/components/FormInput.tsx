@@ -5,11 +5,12 @@ import { StyleSheet, TextInput, TextInputProps, View, Text } from 'react-native'
 interface FormInputProps extends TextInputProps {
   label?: string;
   error?: string;
+  containerStyles?: {};
 }
 
-export function FormInput({ label, error, style, ...props }: FormInputProps) {
+export function FormInput({ label, error, containerStyles, style, ...props }: FormInputProps) {
   return (
-    <View style={styles.container}>
+    <View style={styles.container && containerStyles}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TextInput
         style={[styles.input, error && styles.inputError, style]}
@@ -29,6 +30,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
     color: '#333',
+    fontWeight: '600',
   },
   input: {
     height: 48,

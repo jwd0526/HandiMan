@@ -6,6 +6,15 @@
 ├── golf-tracker
 │   ├── src
 │   │   ├── components
+│   │   │   ├── course
+│   │   │   │   ├── AddCourseModal.tsx
+│   │   │   │   ├── CourseList.tsx
+│   │   │   │   ├── CourseSearch.tsx
+│   │   │   │   ├── CourseStates.tsx
+│   │   │   │   └── TeeSelector.tsx
+│   │   │   ├── round
+│   │   │   │   └── RoundDetails.tsx
+│   │   │   ├── BackButton.tsx
 │   │   │   ├── FormButton.tsx
 │   │   │   └── FormInput.tsx
 │   │   ├── config
@@ -68,9 +77,10 @@
 ├── .gitignore
 ├── app_doc.txt
 ├── dev.sh
-└── document-app.sh
+├── document-app.sh
+└── package-lock.json
 
-19 directories, 48 files
+21 directories, 56 files
 </document_content>
 </document>
 <document index="2">
@@ -193,15 +203,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
+      setIsLoading(true);
       const token = await getAuthToken();
+      console.log('Stored token:', token ? 'exists' : 'none');
+      
       if (token) {
+        console.log('Validating token...');
         const userData = await validateToken(token);
         if (userData) {
+          console.log('Token valid, user:', userData.email);
           setUser(userData);
+        } else {
+          console.log('Token invalid');
+          await authLogout(); // Clean up invalid token
         }
+      } else {
+        console.log('No token found');
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
+      await authLogout(); // Clean up on error
     } finally {
       setIsLoading(false);
     }
@@ -732,6 +753,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   form: {
+    gap: 16,
     marginBottom: 24,
   },
   generalError: {
@@ -1097,6 +1119,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   form: {
+    gap: 16,
     marginBottom: 24,
   },
   generalError: {
@@ -1125,229 +1148,30 @@ const styles = StyleSheet.create({
 <document index="12">
 <source>golf-tracker/src/screens/AddRoundScreen.tsx</source>
 <document_content>
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+// src/screens/AddRoundScreen.tsx
+import React, { useState } from 'react';
+import { View, StyleSheet, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { FormInput } from '../components/FormInput';
-import { FormButton } from '../components/FormButton';
 import { createRound } from '../services/rounds';
-import { searchCourses, createCourse } from '../services/courses';
 import { useAuth } from '../contexts/AuthContext';
 import { MainStackParamList } from '../types/navigation';
 import { Course } from 'shared';
-import { X } from 'lucide-react';
+import { CourseSearch } from '../components/course/CourseSearch';
+import { RoundDetails } from '../components/round/RoundDetails';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'AddRound'>;
-
-// Add Course Modal Component
-function AddCourseModal({ visible, onClose, onAdd }: {
-  visible: boolean;
-  onClose: () => void;
-  onAdd: (courseData: { name: string; location: { city?: string; state?: string; country?: string; } }) => Promise<void>;
-}) {
-  const [name, setName] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [country, setCountry] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
-
-  const handleSubmit = async () => {
-    // Validate
-    const newErrors: {[key: string]: string} = {};
-    if (!name.trim()) newErrors.name = 'Course name is required';
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await onAdd({
-        name,
-        location: {
-          city: city.trim() || undefined,
-          state: state.trim() || undefined,
-          country: country.trim() || undefined,
-        }
-      });
-      onClose();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to add course');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add New Course</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <X size={24} color="#666" />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.modalForm}>
-            <FormInput
-              label="Course Name"
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter course name"
-              error={errors.name}
-              editable={!loading}
-            />
-            <FormInput
-              label="City"
-              value={city}
-              onChangeText={setCity}
-              placeholder="Enter city"
-              editable={!loading}
-            />
-            <FormInput
-              label="State/Province"
-              value={state}
-              onChangeText={setState}
-              placeholder="Enter state/province"
-              editable={!loading}
-            />
-            <FormInput
-              label="Country"
-              value={country}
-              onChangeText={setCountry}
-              placeholder="Enter country"
-              editable={!loading}
-            />
-            
-            <View style={styles.modalButtons}>
-              <FormButton
-                title="Cancel"
-                onPress={onClose}
-                variant="secondary"
-                loading={loading}
-              />
-              <FormButton
-                title="Add Course"
-                onPress={handleSubmit}
-                loading={loading}
-              />
-            </View>
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-// Course Selection Component
-function CourseSelector({ onSelect }: { onSelect: (course: Course) => void }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Course[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [searching, setSearching] = useState(false);
-  const { user } = useAuth();
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    setSearching(true);
-    try {
-      const courses = await searchCourses(searchQuery);
-      setSearchResults(courses);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to search courses');
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleAddCourse = async (courseData: {
-    name: string;
-    location: {
-      city?: string;
-      state?: string;
-      country?: string;
-    };
-  }) => {
-    if (!user) throw new Error('User not authenticated');
-
-    const course = await createCourse({
-      ...courseData,
-      addedBy: user._id,
-    });
-    
-    onSelect(course);
-  };
-
-  return (
-    <View>
-      <View style={styles.searchContainer}>
-        <FormInput
-          label="Search Courses"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Enter course name"
-          onSubmitEditing={handleSearch}
-          style={styles.searchInput}
-        />
-        <FormButton
-          title="Search"
-          onPress={handleSearch}
-          loading={searching}
-        />
-      </View>
-
-      {searching ? (
-        <ActivityIndicator style={styles.searchingIndicator} />
-      ) : searchResults.length > 0 ? (
-        <View style={styles.searchResults}>
-          {searchResults.map((course) => (
-            <TouchableOpacity
-              key={course._id}
-              style={styles.courseItem}
-              onPress={() => onSelect(course)}
-            >
-              <Text style={styles.courseName}>{course.name}</Text>
-              {course.location.city && (
-                <Text style={styles.courseLocation}>
-                  {[course.location.city, course.location.state].filter(Boolean).join(', ')}
-                </Text>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      ) : null}
-
-      <TouchableOpacity
-        style={styles.addCourseButton}
-        onPress={() => setShowAddModal(true)}
-      >
-        <Text style={styles.addCourseText}>+ Add New Course</Text>
-      </TouchableOpacity>
-
-      <AddCourseModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        onAdd={handleAddCourse}
-      />
-    </View>
-  );
-}
 
 export default function AddRoundScreen({ navigation }: Props) {
   const { user } = useAuth();
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedTee, setSelectedTee] = useState('');
   const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(true);
   const [score, setScore] = useState('');
   const [putts, setPutts] = useState('');
   const [fairways, setFairways] = useState('');
+  const [greens, setGreens] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
@@ -1389,6 +1213,7 @@ export default function AddRoundScreen({ navigation }: Props) {
         score: Number(score),
         putts: Number(putts),
         fairways: Number(fairways),
+        greens: Number(greens),
         notes: notes.trim() || undefined,
         addedBy: user._id,
       });
@@ -1406,135 +1231,39 @@ export default function AddRoundScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          <Text style={styles.title}>Add New Round</Text>
-
-          {/* Course Selection */}
-          {!selectedCourse ? (
-            <CourseSelector onSelect={setSelectedCourse} />
-          ) : (
-            <View style={styles.selectedCourse}>
-              <View style={styles.selectedCourseHeader}>
-                <View>
-                  <Text style={styles.selectedCourseName}>{selectedCourse.name}</Text>
-                  {selectedCourse.location.city && (
-                    <Text style={styles.selectedCourseLocation}>
-                      {[selectedCourse.location.city, selectedCourse.location.state]
-                        .filter(Boolean)
-                        .join(', ')}
-                    </Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  onPress={() => setSelectedCourse(null)}
-                  style={styles.changeCourseButton}
-                >
-                  <Text style={styles.changeCourseText}>Change</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Tee Selection */}
-              <View style={styles.teeSelection}>
-                <Text style={styles.label}>Select Tee</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  {selectedCourse.tees.map((tee) => (
-                    <TouchableOpacity
-                      key={tee.name}
-                      style={[
-                        styles.teeButton,
-                        selectedTee === tee.name && styles.teeButtonSelected
-                      ]}
-                      onPress={() => setSelectedTee(tee.name)}
-                    >
-                      <Text style={[
-                        styles.teeButtonText,
-                        selectedTee === tee.name && styles.teeButtonTextSelected
-                      ]}>
-                        {tee.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-                {errors.tee && <Text style={styles.errorText}>{errors.tee}</Text>}
-              </View>
-
-              {/* Date Selection */}
-              <TouchableOpacity
-                style={styles.dateButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={styles.label}>Date</Text>
-                <Text style={styles.dateText}>
-                  {date.toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-
-              {showDatePicker && (
-                <DateTimePicker
-                  value={date}
-                  mode="date"
-                  display="default"
-                  onChange={(event, selectedDate) => {
-                    setShowDatePicker(false);
-                    if (selectedDate) {
-                      setDate(selectedDate);
-                    }
-                  }}
-                />
-              )}
-
-              {/* Score Inputs */}
-              <View style={styles.scoreInputs}>
-                <FormInput
-                  label="Score"
-                  value={score}
-                  onChangeText={setScore}
-                  keyboardType="numeric"
-                  placeholder="Enter total score"
-                  error={errors.score}
-                  editable={!loading}
-                />
-                <FormInput
-                  label="Putts"
-                  value={putts}
-                  onChangeText={setPutts}
-                  keyboardType="numeric"
-                  placeholder="Total putts"
-                  error={errors.putts}
-                  editable={!loading}
-                />
-                <FormInput
-                  label="Fairways Hit"
-                  value={fairways}
-                  onChangeText={setFairways}
-                  keyboardType="numeric"
-                  placeholder="Fairways hit"
-                  error={errors.fairways}
-                  editable={!loading}
-                />
-              </View>
-
-              {/* Notes */}
-              <FormInput
-                label="Notes"
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Add notes about your round"
-                multiline
-                numberOfLines={4}
-                editable={!loading}
-              />
-
-              {/* Submit Button */}
-              <FormButton
-                title="Save Round"
-                onPress={handleSubmit}
-                loading={loading}
-              />
-            </View>
-          )}
-        </View>
+      <ScrollView style={{ height: '100%' }}>
+        {!selectedCourse ? (
+          <CourseSearch onSelect={setSelectedCourse} />
+        ) : (
+          <RoundDetails
+            course={selectedCourse}
+            selectedTee={selectedTee}
+            onTeeSelect={setSelectedTee}
+            date={date}
+            showDatePicker={showDatePicker}
+            onShowDatePicker={setShowDatePicker}
+            onDateChange={(event, selectedDate) => {
+              setShowDatePicker(false);
+              if (selectedDate) {
+                setDate(selectedDate);
+              }
+            }}
+            score={score}
+            onScoreChange={setScore}
+            putts={putts}
+            onPuttsChange={setPutts}
+            fairways={fairways}
+            onFairwaysChange={setFairways}
+            greens={greens}
+            onGreensChange={setGreens}
+            notes={notes}
+            onNotesChange={setNotes}
+            errors={errors}
+            loading={loading}
+            onSubmit={handleSubmit}
+            onChangeCourse={() => setSelectedCourse(null)}
+          />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -1542,199 +1271,19 @@ export default function AddRoundScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    height: '100%',
     backgroundColor: '#f5f5f5',
   },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    color: '#333',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    marginBottom: 16,
-  },
-  searchInput: {
-    flex: 1,
-  },
-  searchingIndicator: {
-    marginVertical: 16,
-  },
-  searchResults: {
-    marginTop: 8,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  courseItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  courseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  courseLocation: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  addCourseButton: {
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2f95dc',
-    borderStyle: 'dashed',
-  },
-  addCourseText: {
-    color: '#2f95dc',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    width: '90%',
-    maxHeight: '80%',
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalForm: {
-    padding: 16,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginTop: 24,
-  },
-  selectedCourse: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  selectedCourseHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  selectedCourseName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  selectedCourseLocation: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  changeCourseButton: {
-    padding: 8,
-  },
-  changeCourseText: {
-    color: '#2f95dc',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  teeSelection: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  teeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 8,
-    backgroundColor: '#fff',
-  },
-  teeButtonSelected: {
-    backgroundColor: '#2f95dc',
-    borderColor: '#2f95dc',
-  },
-  teeButtonText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  teeButtonTextSelected: {
-    color: '#fff',
-  },
-  dateButton: {
-    marginBottom: 16,
-  },
-  dateText: {
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
-  scoreInputs: {
-    gap: 16,
-    marginBottom: 16,
-  },
-  errorText: {
-    color: '#ff3b30',
-    fontSize: 14,
-    marginTop: 4,
-  }
 });</document_content>
 </document>
 <document index="13">
 <source>golf-tracker/src/screens/HomeScreen.tsx</source>
 <document_content>
 // src/screens/HomeScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -1745,36 +1294,86 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchUserRounds } from '../services/rounds';
 import { Round } from 'shared';
 import { MainStackParamList } from '../types/navigation';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { Hand } from 'lucide-react-native';
+import { get, set } from 'mongoose';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Home'>;
+
+
 
 export default function HomeScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchRounds = async () => {
-      try {
-        if (user) {
-          const userRounds = await fetchUserRounds(user._id);
-          setRounds(userRounds);
-        }
-      } catch (error) {
-        console.error('Error fetching rounds:', error);
-        Alert.alert('Error', 'Failed to fetch rounds. Please try again later.');
-      } finally {
-        setLoading(false);
-      }
-    };
+  const calculateHandicap = (rounds: Round[]): number => {
+    
+    if (rounds.length < 3) return 0;
+    
+    if (rounds.length > 20) {
+      rounds = rounds.slice(0, 20);
+    }
 
-    fetchRounds();
-  }, [user]);
+    let  difs: number[] = [];
+    for (let i: number = 0; i < rounds.length; i++) {
+      difs.push(rounds[i].differential);
+    }
+    difs.sort((a, b) => a - b);
+
+    switch (difs.length) {
+      case 20: return difs.slice(0, 8).reduce((a, b) => a + b, 0) / 8;
+      case 3: return difs[0] - 2;
+      case 4: return difs[0] - 1;
+      case 5: return difs[0];
+      case 6: return ((difs[0] + difs[1]) / 2) - 1;
+      case 7: return ((difs[0] + difs[1]) / 2);
+      case 8: return ((difs[0] + difs[1]) / 2);
+      case 9: return ((difs[0] + difs[1] + difs[2]) / 3);
+      case 10: return ((difs[0] + difs[1] + difs[2]) / 3);
+      case 11: return ((difs[0] + difs[1] + difs[2]) / 3);
+      case 12: return difs.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
+      case 13: return difs.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
+      case 14: return difs.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
+      case 15: return difs.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+      case 16: return difs.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+      case 17: return difs.slice(0, 6).reduce((a, b) => a + b, 0) / 6;
+      case 18: return difs.slice(0, 6).reduce((a, b) => a + b, 0) / 6;
+      case 19: return difs.slice(0, 7).reduce((a, b) => a + b, 0) / 7;
+      default: return 0;
+    }
+  };
+  
+  const [handicap, setHandicap] = useState<number>(calculateHandicap(rounds));
+
+  
+
+  // Use useFocusEffect to fetch rounds when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const fetchRounds = async () => {
+        try {
+          if (user) {
+            setLoading(true);
+            const userRounds = await fetchUserRounds(user._id);
+            setRounds(userRounds);
+            setHandicap(calculateHandicap(rounds))
+          }
+        } catch (error) {
+          console.error('Error fetching rounds:', error);
+          Alert.alert('Error', 'Failed to fetch rounds. Please try again later.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchRounds();
+    }, [user])
+  );
 
   const handleLogout = async () => {
     try {
@@ -1798,7 +1397,6 @@ export default function HomeScreen({ navigation }: Props) {
     );
   }
 
-  const handicapIndex = 14.2; // This would come from actual user data
   const recentScores = rounds.slice(0, 5).map((round) => round.score);
 
   return (
@@ -1808,7 +1406,7 @@ export default function HomeScreen({ navigation }: Props) {
         <View style={styles.header}>
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeText}>Welcome back, </Text>
-            <Text style={styles.nameText}>{user.name || 'Golfer'}</Text>
+            <Text style={styles.nameText}>{user?.name || 'Golfer'}</Text>
           </View>
           <TouchableOpacity 
             style={styles.logoutButton}
@@ -1821,7 +1419,7 @@ export default function HomeScreen({ navigation }: Props) {
         {/* Handicap Card */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Current Handicap</Text>
-          <Text style={styles.handicapText}>{handicapIndex}</Text>
+          <Text style={styles.handicapText}>{handicap}</Text>
           <TouchableOpacity style={styles.actionButton}>
             <Text style={styles.actionButtonText}>View Details</Text>
           </TouchableOpacity>
@@ -1829,7 +1427,10 @@ export default function HomeScreen({ navigation }: Props) {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.quickActionButton} onPress={() => navigation.navigate('AddRound')}>
+          <TouchableOpacity 
+            style={styles.quickActionButton} 
+            onPress={() => navigation.navigate('AddRound')}
+          >
             <Text style={styles.quickActionEmoji}>🏌️</Text>
             <Text style={styles.quickActionText}>New Round</Text>
           </TouchableOpacity>
@@ -2024,6 +1625,916 @@ const styles = StyleSheet.create({
 });</document_content>
 </document>
 <document index="14">
+<source>golf-tracker/src/components/BackButton.tsx</source>
+<document_content>
+import React from 'react';
+import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { ChevronLeft } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+
+interface BackButtonProps {
+  onPress?: () => void;
+  title?: string;
+}
+
+export function BackButton({ onPress, title = 'Back' }: BackButtonProps) {
+  const navigation = useNavigation();
+
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  return (
+    <TouchableOpacity 
+      style={styles.container}
+      onPress={handlePress}
+    >
+      <ChevronLeft size={24} color="#2f95dc" />
+      <Text style={styles.text}>{title}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  text: {
+    fontSize: 16,
+    color: '#2f95dc',
+    fontWeight: '500',
+    marginLeft: -4,
+  },
+});</document_content>
+</document>
+<document index="15">
+<source>golf-tracker/src/components/course/CourseSearch.tsx</source>
+<document_content>
+// src/components/course/CourseSearch.tsx
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Alert, TextInput, ActivityIndicator, Keyboard } from 'react-native';
+import { Course } from 'shared';
+import { searchCourses, createCourse } from '../../services/courses';
+import { useAuth } from '../../contexts/AuthContext';
+import { Search as SearchIcon, PlusCircle as PlusCircleIcon, MapPin as MapPinIcon } from 'lucide-react-native';
+import { AddCourseModal } from './AddCourseModal';
+import { CourseList } from './CourseList';
+import { NoResults } from './CourseStates';
+import { InitialState } from './CourseStates';
+import debounce from 'lodash/debounce';
+import { BackButton } from '../BackButton';
+
+interface CourseSearchProps {
+  onSelect: (course: Course) => void;
+}
+
+export function CourseSearch({ onSelect }: CourseSearchProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Course[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const { user } = useAuth();
+
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const courses = await searchCourses(query);
+      // Limit to 8 results
+      setSearchResults(courses.slice(0, 8));
+    } catch (error) {
+      console.error('Search error:', error);
+      Alert.alert('Error', 'Failed to search courses');
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  // Debounce the search to avoid too many API calls
+  const debouncedSearch = useCallback(
+    debounce((query: string) => performSearch(query), 300),
+    []
+  );
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    debouncedSearch(text);
+  };
+
+  return (
+    <View style={styles.searchSection}>
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.searchTitle}>Find a Course</Text>
+      </View>
+      
+      <View style={styles.searchInputContainer}>
+        <SearchIcon size={20} color="#666" style={styles.searchIcon} />
+        <View style={styles.searchBar}>
+          <TextInput 
+            style={styles.searchInput}
+            placeholderTextColor="#999"
+            placeholder="Search for a course"
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            autoCapitalize="words"
+          />
+        </View>
+      </View>
+
+      {searching ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2f95dc" />
+        </View>
+      ) : searchResults.length > 0 ? (
+        <CourseList courses={searchResults} onSelect={onSelect} />
+      ) : searchQuery ? (
+        <NoResults onAddNew={() => setShowAddModal(true)} />
+      ) : (
+        <InitialState />
+      )}
+
+      <AddCourseModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={async (courseData) => {
+          if (!user) throw new Error('User not authenticated');
+          const course = await createCourse({
+            ...courseData,
+            addedBy: user._id,
+          });
+          onSelect(course);
+        }}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  searchSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    margin: 16,
+    gap: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  searchTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  searchInputContainer: {
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchBar: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 'auto',
+  },
+  searchIcon: {
+    width: 'auto',
+    height: 'auto',
+  },
+  searchInput: {
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+});</document_content>
+</document>
+<document index="16">
+<source>golf-tracker/src/components/course/CourseStates.tsx</source>
+<document_content>
+// src/components/course/CourseStates.tsx
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { PlusCircle as PlusCircleIcon } from 'lucide-react-native';
+
+interface NoResultsProps {
+  onAddNew: () => void;
+}
+
+export function NoResults({ onAddNew }: NoResultsProps) {
+  return (
+    <View style={styles.noResultsContainer}>
+      <Text style={styles.noResultsText}>No courses found</Text>
+      <TouchableOpacity
+        style={styles.addCourseButton}
+        onPress={onAddNew}
+      >
+        <PlusCircleIcon size={20} color="#2f95dc" />
+        <Text style={styles.addCourseText}>Add New Course</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+export function InitialState() {
+  return (
+    <View style={styles.initialStateContainer}>
+      <Text style={styles.initialStateText}>
+        Search for a golf course to start tracking your round
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  noResultsContainer: {
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  noResultsText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+  },
+  addCourseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+  },
+  addCourseText: {
+    color: '#2f95dc',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  initialStateContainer: {
+    padding: 24,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+  },
+  initialStateText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+});</document_content>
+</document>
+<document index="17">
+<source>golf-tracker/src/components/course/AddCourseModal.tsx</source>
+<document_content>
+// src/components/course/AddCourseModal.tsx
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { FormInput } from '../FormInput';
+import { FormButton } from '../FormButton';
+import { X as XIcon } from 'lucide-react-native';
+
+interface AddCourseModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (courseData: {
+    name: string;
+    location: {
+      city?: string;
+      state?: string;
+      country?: string;
+    };
+  }) => Promise<void>;
+}
+
+export function AddCourseModal({ visible, onClose, onAdd }: AddCourseModalProps) {
+  const [name, setName] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [country, setCountry] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+
+  const handleSubmit = async () => {
+    const newErrors: {[key: string]: string} = {};
+    if (!name.trim()) newErrors.name = 'Course name is required';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onAdd({
+        name,
+        location: {
+          city: city.trim() || undefined,
+          state: state.trim() || undefined,
+          country: country.trim() || undefined,
+        }
+      });
+      onClose();
+    } catch (error) {
+      Alert.alert('Error', 'Failed to add course');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Add New Course</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <XIcon size={24} color="#666" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.modalForm}>
+            <FormInput
+              label="Course Name"
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter course name"
+              error={errors.name}
+              editable={!loading}
+            />
+            <FormInput
+              label="City"
+              value={city}
+              onChangeText={setCity}
+              placeholder="Enter city"
+              editable={!loading}
+            />
+            <FormInput
+              label="State/Province"
+              value={state}
+              onChangeText={setState}
+              placeholder="Enter state/province"
+              editable={!loading}
+            />
+            <FormInput
+              label="Country"
+              value={country}
+              onChangeText={setCountry}
+              placeholder="Enter country"
+              editable={!loading}
+            />
+            
+            <View style={styles.modalButtons}>
+              <FormButton
+                title="Cancel"
+                onPress={onClose}
+                variant="secondary"
+                loading={loading}
+              />
+              <FormButton
+                title="Add Course"
+                onPress={handleSubmit}
+                loading={loading}
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalForm: {
+    padding: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 24,
+  },
+});</document_content>
+</document>
+<document index="18">
+<source>golf-tracker/src/components/course/TeeSelector.tsx</source>
+<document_content>
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  Alert,
+  Platform,
+} from "react-native";
+import { ChevronDown, Plus } from "lucide-react-native";
+import { Course } from "shared";
+import { FormInput } from "../FormInput";
+import { FormButton } from "../FormButton";
+
+interface TeeSelectorProps {
+  course: Course;
+  selectedTee: string;
+  onTeeSelect: (tee: string) => void;
+  onAddTee: (teeData: {
+    name: string;
+    rating: number;
+    slope: number;
+    numberOfFairways: number;
+  }) => Promise<Course>;
+}
+
+export function TeeSelector({
+  course,
+  selectedTee,
+  onTeeSelect,
+  onAddTee,
+}: TeeSelectorProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleOpenDropdown = () => {
+    if (course.tees.length === 0) {
+      setShowAddModal(true);
+    } else {
+      setIsOpen(!isOpen);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.label}>Select Tee</Text>
+
+      <TouchableOpacity
+        style={styles.dropdownButton}
+        onPress={handleOpenDropdown}
+      >
+        <Text style={styles.selectedText}>{selectedTee || "Select a tee"}</Text>
+        <ChevronDown size={20} color="#666" />
+      </TouchableOpacity>
+
+      {isOpen && (
+        <View style={styles.dropdown}>
+          {course.tees.map((tee) => (
+            <TouchableOpacity
+              key={tee.name}
+              style={styles.dropdownItem}
+              onPress={() => {
+                onTeeSelect(tee.name);
+                setIsOpen(false);
+              }}
+            >
+              <Text
+                style={[
+                  styles.dropdownText,
+                  selectedTee === tee.name && styles.selectedDropdownText,
+                ]}
+              >
+                {tee.name}
+              </Text>
+              <Text style={styles.teeDetails}>
+                {`${tee.rating} / ${tee.slope}`}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              setIsOpen(false);
+              setShowAddModal(true);
+            }}
+          >
+            <Plus size={20} color="#2f95dc" />
+            <Text style={styles.addButtonText}>Add New Tee</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <AddTeeModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAdd={async (teeData) => {
+          setLoading(true);
+          try {
+            await onAddTee(teeData);
+            setShowAddModal(false);
+            onTeeSelect(teeData.name);
+          } catch (error) {
+            Alert.alert("Error", "Failed to add tee");
+          } finally {
+            setLoading(false);
+          }
+        }}
+        loading={loading}
+      />
+    </View>
+  );
+}
+
+interface AddTeeModalProps {
+  visible: boolean;
+  onClose: () => void;
+  onAdd: (teeData: {
+    name: string;
+    rating: number;
+    slope: number;
+    numberOfFairways: number;
+  }) => Promise<void>;
+  loading: boolean;
+}
+
+function AddTeeModal({ visible, onClose, onAdd, loading }: AddTeeModalProps) {
+  const [name, setName] = useState("");
+  const [rating, setRating] = useState("");
+  const [slope, setSlope] = useState("");
+  const [fairways, setFairways] = useState("");
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
+  const validateForm = () => {
+    const newErrors: { [key: string]: string } = {};
+
+    if (!name.trim()) newErrors.name = "Tee color/name is required";
+    if (!rating) {
+      newErrors.rating = "Course rating is required";
+    } else if (isNaN(Number(rating)) || Number(rating) < 0) {
+      newErrors.rating = "Please enter a valid rating";
+    }
+    if (!slope) {
+      newErrors.slope = "Slope rating is required";
+    } else if (
+      isNaN(Number(slope)) ||
+      Number(slope) < 55 ||
+      Number(slope) > 155
+    ) {
+      newErrors.slope = "Slope must be between 55 and 155";
+    }
+    if (!fairways) {
+      newErrors.fairways = "Number of fairways is required";
+    } else if (
+      isNaN(Number(fairways)) ||
+      Number(fairways) < 0 ||
+      Number(fairways) > 18
+    ) {
+      newErrors.fairways = "Must be between 0 and 18";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    await onAdd({
+      name: name.trim(),
+      rating: Number(rating),
+      slope: Number(slope),
+      numberOfFairways: Number(fairways),
+    });
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Add New Tee</Text>
+
+          <FormInput
+            label="Tee Color/Name"
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g., Blue"
+            error={errors.name}
+            editable={!loading}
+          />
+
+          <FormInput
+            label="Course Rating"
+            value={rating}
+            onChangeText={setRating}
+            placeholder="e.g., 72.1"
+            keyboardType="decimal-pad"
+            error={errors.rating}
+            editable={!loading}
+          />
+
+          <FormInput
+            label="Slope Rating"
+            value={slope}
+            onChangeText={setSlope}
+            placeholder="e.g., 125"
+            keyboardType="number-pad"
+            error={errors.slope}
+            editable={!loading}
+          />
+
+          <FormInput
+            label="Number of Fairways"
+            value={fairways}
+            onChangeText={setFairways}
+            placeholder="e.g., 14"
+            keyboardType="number-pad"
+            error={errors.fairways}
+            editable={!loading}
+          />
+
+          <View style={styles.modalButtons}>
+            <FormButton
+              style={styles.modalButton}
+              title="Cancel"
+              onPress={onClose}
+              variant="secondary"
+              loading={loading}
+            />
+            <FormButton
+              style={styles.modalButton}
+              title="Add Tee"
+              onPress={handleSubmit}
+              loading={loading}
+            />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  dropdownButton: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    height: 48,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+  },
+  selectedText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  dropdown: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  dropdownText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  selectedDropdownText: {
+    color: "#2f95dc",
+    fontWeight: "600",
+  },
+  teeDetails: {
+    fontSize: 14,
+    color: "#666",
+  },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    gap: 8,
+  },
+  addButtonText: {
+    color: "#2f95dc",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    width: "90%",
+    maxWidth: 400,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  modalButton: {
+    minWidth: 120,
+  },
+});
+</document_content>
+</document>
+<document index="19">
+<source>golf-tracker/src/components/course/CourseList.tsx</source>
+<document_content>
+// src/components/course/CourseList.tsx
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Course } from 'shared';
+import { MapPin as MapPinIcon } from 'lucide-react-native';
+
+interface CourseListProps {
+  courses: Course[];
+  onSelect: (course: Course) => void;
+}
+
+export function CourseList({ courses, onSelect }: CourseListProps) {
+  return (
+    <ScrollView style={styles.resultsContainer}>
+      {courses.map((course) => (
+        <CourseCard key={course._id} course={course} onSelect={onSelect} />
+      ))}
+    </ScrollView>
+  );
+}
+
+interface CourseCardProps {
+  course: Course;
+  onSelect: (course: Course) => void;
+}
+
+function CourseCard({ course, onSelect }: CourseCardProps) {
+  const locationString = [course.location.city, course.location.state]
+    .filter(Boolean)
+    .join(', ');
+
+  return (
+    <TouchableOpacity
+      style={styles.courseCard}
+      onPress={() => onSelect(course)}
+    >
+      <View style={styles.courseInfo}>
+        <Text style={styles.courseName}>{course.name}</Text>
+        {locationString && (
+          <View style={styles.locationContainer}>
+            <MapPinIcon size={14} color="#666" style={styles.locationIcon} />
+            <Text style={styles.locationText}>{locationString}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.courseTeesContainer}>
+        <Text style={styles.teesLabel}>
+          {course.tees.length} {course.tees.length === 1 ? 'Tee' : 'Tees'}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  resultsContainer: {
+    maxHeight: 400,
+  },
+  courseCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  courseInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  courseName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  locationIcon: {
+    marginRight: 4,
+  },
+  locationText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '400',
+  },
+  courseTeesContainer: {
+    backgroundColor: '#f0f9ff',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginLeft: 12,
+  },
+  teesLabel: {
+    fontSize: 12,
+    color: '#2f95dc',
+    fontWeight: '500',
+  },
+});</document_content>
+</document>
+<document index="20">
 <source>golf-tracker/src/components/FormButton.tsx</source>
 <document_content>
 // src/components/FormButton.tsx
@@ -2040,17 +2551,20 @@ interface FormButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   loading?: boolean;
+  style?: {};
 }
 
 export function FormButton({ 
   title, 
   onPress, 
   variant = 'primary',
-  loading = false 
+  loading = false,
+  style, 
 }: FormButtonProps) {
   return (
     <TouchableOpacity
       style={[
+        style,
         styles.button,
         variant === 'secondary' && styles.secondaryButton,
         loading && styles.buttonDisabled
@@ -2100,7 +2614,7 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="15">
+<document index="21">
 <source>golf-tracker/src/components/FormInput.tsx</source>
 <document_content>
 // src/components/FormInput.tsx
@@ -2110,11 +2624,12 @@ import { StyleSheet, TextInput, TextInputProps, View, Text } from 'react-native'
 interface FormInputProps extends TextInputProps {
   label?: string;
   error?: string;
+  containerStyles?: {};
 }
 
-export function FormInput({ label, error, style, ...props }: FormInputProps) {
+export function FormInput({ label, error, containerStyles, style, ...props }: FormInputProps) {
   return (
-    <View style={styles.container}>
+    <View style={styles.container && containerStyles}>
       {label && <Text style={styles.label}>{label}</Text>}
       <TextInput
         style={[styles.input, error && styles.inputError, style]}
@@ -2134,6 +2649,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
     color: '#333',
+    fontWeight: '600',
   },
   input: {
     height: 48,
@@ -2154,7 +2670,272 @@ const styles = StyleSheet.create({
   },
 });</document_content>
 </document>
-<document index="16">
+<document index="22">
+<source>golf-tracker/src/components/round/RoundDetails.tsx</source>
+<document_content>
+// src/components/round/RoundDetails.tsx
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Course } from 'shared';
+import { FormInput } from '../FormInput';
+import { FormButton } from '../FormButton';
+import { TeeSelector } from '../course/TeeSelector';
+import { addTeeToCourse } from '../../services/courses';
+
+interface RoundDetailsProps {
+  course: Course;
+  selectedTee: string;
+  onTeeSelect: (tee: string) => void;
+  date: Date;
+  showDatePicker: boolean;
+  onShowDatePicker: (show: boolean) => void;
+  onDateChange: (event: any, date?: Date) => void;
+  score: string;
+  onScoreChange: (score: string) => void;
+  putts: string;
+  onPuttsChange: (putts: string) => void;
+  fairways: string;
+  onFairwaysChange: (fairways: string) => void;
+  greens: string;
+  onGreensChange: (greens: string) => void;
+  notes: string;
+  onNotesChange: (notes: string) => void;
+  errors: {[key: string]: string};
+  loading: boolean;
+  onSubmit: () => void;
+  onChangeCourse: () => void;
+  onCourseUpdate?: (course: Course) => void;
+}
+
+export function RoundDetails({
+  course,
+  selectedTee,
+  onTeeSelect,
+  date,
+  onDateChange,
+  score,
+  onScoreChange,
+  putts,
+  onPuttsChange,
+  fairways,
+  onFairwaysChange,
+  greens,
+  onGreensChange,
+  notes,
+  onNotesChange,
+  errors,
+  loading,
+  onSubmit,
+  onChangeCourse,
+  onCourseUpdate
+}: RoundDetailsProps) {
+  return (
+    <View style={styles.container}>
+      <View style={styles.selectedCourse}>
+        <View >
+          <View style={styles.selectedCourseHeader}>
+            <View>
+              <Text style={styles.selectedCourseName}>{course.name}</Text>
+              {course.location.city && (
+                <Text style={styles.selectedCourseLocation}>
+                  {[course.location.city, course.location.state]
+                    .filter(Boolean)
+                    .join(', ')}
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={onChangeCourse}
+              style={styles.changeCourseButton}
+            >
+              <Text style={styles.changeCourseText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+          <TeeSelector
+            course={course}
+            selectedTee={selectedTee}
+            onTeeSelect={onTeeSelect}
+            onAddTee={async (teeData) => {
+              try {
+                const updatedCourse = await addTeeToCourse(course._id, teeData);
+                if (onCourseUpdate) {
+                  onCourseUpdate(updatedCourse);
+                }
+                return updatedCourse;
+              } catch (error) {
+                console.error('Error adding tee:', error);
+                throw error;
+              }
+            }}
+          />
+        </View>
+        <View style={styles.dateButton}>
+          <Text style={styles.label}>Date</Text>
+          <DateTimePicker
+            maximumDate={new Date()}
+            style={{
+              marginLeft: -10,
+            }}
+            value={date}
+            mode="date"
+            display="default"
+            onChange={onDateChange}
+          />
+        </View>
+
+        <View style={styles.scoreInputs}>
+          <FormInput
+            label="Score"
+            value={score}
+            onChangeText={onScoreChange}
+            keyboardType="numeric"
+            placeholder="Enter total score"
+            error={errors.score}
+            editable={!loading}
+          />
+          <FormInput
+            label="Putts"
+            value={putts}
+            onChangeText={onPuttsChange}
+            keyboardType="numeric"
+            placeholder="Total putts"
+            error={errors.putts}
+            editable={!loading}
+          />
+          <FormInput
+            label="Fairways Hit (FIRs)"
+            value={fairways}
+            onChangeText={onFairwaysChange}
+            keyboardType="numeric"
+            placeholder="# of FIRs"
+            error={errors.fairways}
+            editable={!loading}
+          />
+          <FormInput
+            label="Greens Hit (GIRs)"
+            value={greens}
+            onChangeText={onGreensChange}
+            keyboardType="numeric"
+            placeholder="# of GIRs"
+            error={errors.greens}
+            editable={!loading}
+          />
+        </View>
+
+        <FormInput
+          containerStyles={styles.notesContainer}
+          style={styles.notes}
+          label="Notes"
+          value={notes}
+          onChangeText={onNotesChange}
+          placeholder="Add notes about your round"
+          multiline
+          numberOfLines={10}
+          editable={!loading}
+        />
+
+        <FormButton
+          style={styles.saveButton}
+          title="Save Round"
+          onPress={onSubmit}
+          loading={loading}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 16,
+    flex: 1,
+    maxHeight: '100%',
+    minHeight: '100%',
+  },
+  selectedCourse: {
+    minHeight: '100%',
+  },
+  selectedCourseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  selectedCourseName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  selectedCourseLocation: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  changeCourseButton: {
+    padding: 8,
+  },
+  changeCourseText: {
+    color: '#2f95dc',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  teeSelection: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  teeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    marginRight: 8,
+    backgroundColor: '#fff',
+  },
+  teeButtonSelected: {
+    backgroundColor: '#2f95dc',
+    borderColor: '#2f95dc',
+  },
+  teeButtonText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  teeButtonTextSelected: {
+    color: '#fff',
+  },
+  dateButton: {
+    marginBottom: 16,
+  },
+  scoreInputs: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#ff3b30',
+    fontSize: 14,
+    marginTop: 4,
+  },
+  notesContainer: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+  },
+  notes: {
+    flex: 1,
+  },
+  saveButton: {
+    marginTop: 16,
+  },
+});</document_content>
+</document>
+<document index="23">
 <source>golf-tracker/src/services/courses.ts</source>
 <document_content>
 // src/services/courses.ts
@@ -2216,9 +2997,64 @@ export async function createCourse(courseData: CreateCourseInput): Promise<Cours
     console.error('Error creating course:', error);
     throw error;
   }
+}
+
+
+export async function addTeeToCourse(
+  courseId: string,
+  teeData: {
+    name: string;
+    rating: number;
+    slope: number;
+    numberOfFairways: number;
+  }
+): Promise<Course> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    console.log('Adding tee to course:', courseId, teeData);
+
+    const response = await fetch(`${API_URL}/courses/${courseId}/tees`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(teeData)
+    });
+
+    if (!response.ok) {
+      // Try to get error message from response
+      const errorData = await response.json().catch(() => null);
+      console.error('Server response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
+      
+      throw new Error(
+        errorData?.message || 
+        `Failed to add tee to course: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    
+    if (!data.success || !data.data) {
+      throw new Error('Invalid response format from server');
+    }
+
+    return data.data as Course;
+  } catch (error) {
+    console.error('Error in addTeeToCourse:', error);
+    throw error;
+  }
 }</document_content>
 </document>
-<document index="17">
+<document index="24">
 <source>golf-tracker/src/services/rounds.ts</source>
 <document_content>
 // src/services/rounds.ts
@@ -2299,14 +3135,14 @@ export async function createRound(roundData: CreateRoundInput): Promise<Round> {
   }
 }</document_content>
 </document>
-<document index="18">
+<document index="25">
 <source>golf-tracker/src/services/auth.ts</source>
 <document_content>
 // src/services/auth.ts
 import * as SecureStore from 'expo-secure-store';
 import { User, CreateUserInput } from 'shared';
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
 const AUTH_TOKEN_KEY = 'auth_token';
 
 export class AuthError extends Error {
@@ -2335,26 +3171,47 @@ interface AuthResponse {
 
 function transformUser(serverUser: ServerUser): User {
   return {
-    ...serverUser,
+    _id: serverUser._id,
+    email: serverUser.email,
+    name: serverUser.name,
     createdAt: new Date(serverUser.createdAt),
     updatedAt: new Date(serverUser.updatedAt)
   };
 }
 
+// Export getStoredToken as getAuthToken for compatibility
+export const getAuthToken = async (): Promise<string | null> => {
+  try {
+    return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  } catch (error) {
+    console.error('Error getting stored token:', error);
+    return null;
+  }
+};
+
 async function storeAuthToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+  try {
+    await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+    console.log('Token stored successfully');
+  } catch (error) {
+    console.error('Error storing token:', error);
+    throw error;
+  }
 }
 
-export async function getAuthToken(): Promise<string | null> {
-  return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
-}
-
-export async function removeAuthToken(): Promise<void> {
-  await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+async function removeAuthToken(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    console.log('Token removed successfully');
+  } catch (error) {
+    console.error('Error removing token:', error);
+    throw error;
+  }
 }
 
 export async function validateToken(token: string): Promise<User | null> {
   try {
+    console.log('Making validate request...');
     const response = await fetch(`${API_URL}/auth/validate`, {
       method: 'GET',
       headers: {
@@ -2363,10 +3220,21 @@ export async function validateToken(token: string): Promise<User | null> {
       }
     });
 
-    if (!response.ok) return null;
+    console.log('Validate response status:', response.status);
+    if (!response.ok) {
+      console.log('Token validation failed');
+      return null;
+    }
 
     const data: AuthResponse = await response.json();
-    return data.success && data.data?.user ? transformUser(data.data.user) : null;
+    console.log('Validate response data:', data);
+
+    if (!data.success || !data.data?.user) {
+      console.log('Invalid response format');
+      return null;
+    }
+
+    return transformUser(data.data.user);
   } catch (error) {
     console.error('Token validation error:', error);
     return null;
@@ -2374,65 +3242,65 @@ export async function validateToken(token: string): Promise<User | null> {
 }
 
 export async function signup(userData: CreateUserInput): Promise<User> {
-  const response = await fetch(`${API_URL}/auth/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(userData),
-  });
+  try {
+    const response = await fetch(`${API_URL}/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData),
+    });
 
-  const data: AuthResponse = await response.json();
+    const data: AuthResponse = await response.json();
 
-  if (!data.success || !data.data?.user || !data.data?.token) {
-    throw new AuthError(data.message || 'Error creating account');
+    if (!data.success || !data.data?.user || !data.data?.token) {
+      throw new AuthError(data.message || 'Error creating account');
+    }
+
+    await storeAuthToken(data.data.token);
+    return transformUser(data.data.user);
+  } catch (error) {
+    console.error('Signup error:', error);
+    if (error instanceof AuthError) throw error;
+    throw new AuthError('Failed to create account');
   }
-
-  await storeAuthToken(data.data.token);
-  return transformUser(data.data.user);
 }
 
 export async function login(email: string, password: string): Promise<User> {
   try {
+    console.log('Attempting login...');
     const response = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
     });
 
-    console.log('Response status:', response.status);
+    console.log('Login response status:', response.status);
     const text = await response.text();
     console.log('Raw response:', text);
 
-    let data;
+    let data: AuthResponse;
     try {
       data = JSON.parse(text);
     } catch (e) {
       console.error('JSON parse error:', e);
       throw new AuthError('Invalid server response');
     }
-    console.log('API Response:', JSON.stringify(data, null, 2));
+
+    console.log('Parsed response:', data);
 
     if (!data.success || !data.data?.user || !data.data?.token) {
       throw new AuthError(data.message || 'Invalid credentials');
     }
 
     const { user, token } = data.data;
-    console.log('User data before transform:', user);
-
+    console.log('Storing token...');
     await storeAuthToken(token);
 
-    // Create user object explicitly
-    const transformedUser: User = {
-      _id: user._id,
-      email: user.email,
-      name: user.name,
-      createdAt: new Date(user.createdAt),
-      updatedAt: new Date(user.updatedAt)
-    };
-
-    console.log('Transformed user:', transformedUser);
+    const transformedUser = transformUser(user);
+    console.log('Login successful:', transformedUser.email);
     return transformedUser;
   } catch (error) {
     console.error('Login error:', error);
+    if (error instanceof AuthError) throw error;
     throw new AuthError('Login failed');
   }
 }
@@ -2441,6 +3309,7 @@ export async function logout(): Promise<void> {
   try {
     await removeAuthToken();
   } catch (error) {
+    console.error('Logout error:', error);
     throw new AuthError('Error logging out');
   }
 }</document_content>
@@ -2452,12 +3321,7 @@ export async function logout(): Promise<void> {
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from 'shared';
-import UserModel, { IUser } from '../models/User';
-
-// Extend Express Request type to include user
-interface AuthRequest extends Request {
-  user?: User;
-}
+import UserModel from '../models/User';
 
 interface JwtPayload {
   userId: string;
@@ -2465,13 +3329,17 @@ interface JwtPayload {
 }
 
 export const authenticateToken = async (
-  req: AuthRequest,
+  req: Request & { user?: User },
   res: Response,
   next: NextFunction
 ) => {
+  console.log('Authenticating token...');
+  console.log('Auth header:', req.headers.authorization);
+
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('No Bearer token found');
       return res.status(401).json({
         success: false,
         message: 'No token provided'
@@ -2479,26 +3347,31 @@ export const authenticateToken = async (
     }
 
     const token = authHeader.split(' ')[1];
+    console.log('Token found:', token.substring(0, 10) + '...');
     
-    const decoded = jwt.verify(
-      token, 
-      process.env.JWT_SECRET!
-    ) as JwtPayload;
-    
-    // Explicitly type the mongoose document
-    const user = await UserModel.findById(decoded.userId)
-      .select('-password') as IUser | null;
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET not configured');
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error'
+      });
+    }
 
+    const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
+    console.log('Token decoded:', decoded);
+
+    const user = await UserModel.findById(decoded.userId).select('-password');
     if (!user) {
+      console.log('User not found for token');
       return res.status(401).json({
         success: false,
         message: 'User not found'
       });
     }
 
-    // Transform mongoose document to shared User type
+    console.log('User found:', user.email);
     req.user = {
-      _id: user._id.toString(), // Convert mongoose ObjectId to string
+      _id: user._id.toString(),
       email: user.email,
       name: user.name,
       createdAt: user.createdAt,
@@ -2507,6 +3380,7 @@ export const authenticateToken = async (
 
     next();
   } catch (error) {
+    console.error('Auth middleware error:', error);
     if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({
         success: false,
@@ -2514,7 +3388,6 @@ export const authenticateToken = async (
       });
     }
 
-    console.error('Auth middleware error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error'
@@ -2526,19 +3399,19 @@ export const authenticateToken = async (
 <source>server/models/Round.ts</source>
 <document_content>
 // server/models/Round.ts
-import mongoose from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import { Round } from 'shared';
+import CourseModel from './Course';
 
 export interface IRound extends Omit<Round, '_id' | 'course' | 'addedBy'> {
   _id: mongoose.Types.ObjectId;
   course: mongoose.Types.ObjectId;
   addedBy: mongoose.Types.ObjectId;
-  calculateDifferential(): Promise<number>;
 }
 
-const roundSchema = new mongoose.Schema({
+const roundSchema = new Schema({
   course: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'Course',
     required: true
   },
@@ -2563,11 +3436,19 @@ const roundSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  greens: {
+    type: Number,
+    required: true
+  },
   notes: {
     type: String
   },
+  differential: {
+    type: Number,
+    required: true
+  },
   addedBy: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
   }
@@ -2579,16 +3460,31 @@ const roundSchema = new mongoose.Schema({
 roundSchema.index({ addedBy: 1, date: -1 });
 roundSchema.index({ course: 1, addedBy: 1 });
 
-// Calculate differential for handicap index
-roundSchema.methods.calculateDifferential = async function(): Promise<number> {
-  const course = await mongoose.model('Course').findById(this.course);
-  if (!course) throw new Error('Course not found');
-  
-  const tee = course.tees.find((t: { name: string; }) => t.name === this.tees);
-  if (!tee) throw new Error('Tee not found');
-  
-  return ((this.score - tee.rating) * 113) / tee.slope;
-};
+// Pre-save middleware to calculate differential
+roundSchema.pre('save', async function(next) {
+  if (this.isModified('score') || this.isModified('course') || this.isModified('tees')) {
+    try {
+      const course = await CourseModel.findById(this.course);
+      if (!course) {
+        throw new Error('Course not found');
+      }
+
+      const tee = course.tees.find(t => t.name === this.tees);
+      if (!tee) {
+        throw new Error('Tee not found');
+      }
+
+      // Calculate differential using USGA formula
+      this.differential = ((this.score - tee.rating) * 113) / tee.slope;
+      // Round to one decimal place
+      this.differential = Math.round(this.differential * 10) / 10;
+    } catch (error) {
+      next(error as Error);
+      return;
+    }
+  }
+  next();
+});
 
 const Round = mongoose.model<IRound>('Round', roundSchema);
 export default Round;</document_content>
@@ -2753,15 +3649,18 @@ if (!MONGODB_URI) {
   throw new Error('MONGODB_URI must be defined in environment variables');
 }
 
+// Configure CORS
 app.use(cors({
-  origin: ['http://localhost:19006', 'http://localhost:19000'],
+  origin: ['http://localhost:19006', 'http://localhost:19000', 'exp://localhost:19000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true
 }));
 
+// Parse JSON bodies
 app.use(express.json());
 
+// Connect to MongoDB
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch(err => {
@@ -2769,10 +3668,12 @@ mongoose.connect(MONGODB_URI)
     process.exit(1);
   });
 
+// Mount routes
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/rounds', roundRoutes);
 
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',
@@ -2780,6 +3681,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Server error:', err);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error'
+  });
+});
+
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });</document_content>
@@ -2860,6 +3771,103 @@ router.post('/', authenticateToken, async (req: Request & { user?: { _id: string
   }
 });
 
+router.post('/:courseId/tees', authenticateToken, async (req: Request & { user?: { _id: string } }, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user?._id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Find the course and verify ownership
+    const course = await CourseModel.findById(courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+
+    if (course.addedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to modify this course'
+      });
+    }
+
+    // Validate tee data
+    const teeData = req.body;
+    if (!teeData.name || !teeData.rating || !teeData.slope || !teeData.numberOfFairways) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required tee information'
+      });
+    }
+
+    // Validate tee data values
+    if (typeof teeData.rating !== 'number' || teeData.rating < 0 || teeData.rating > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid course rating. Must be between 0 and 100'
+      });
+    }
+
+    if (typeof teeData.slope !== 'number' || teeData.slope < 55 || teeData.slope > 155) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid slope rating. Must be between 55 and 155'
+      });
+    }
+
+    if (typeof teeData.numberOfFairways !== 'number' || 
+        !Number.isInteger(teeData.numberOfFairways) || 
+        teeData.numberOfFairways < 0 || 
+        teeData.numberOfFairways > 18) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid number of fairways. Must be an integer between 0 and 18'
+      });
+    }
+
+    // Check if tee color already exists
+    const teeExists = course.tees.some(tee => 
+      tee.name.toLowerCase() === teeData.name.toLowerCase()
+    );
+
+    if (teeExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tee color already exists'
+      });
+    }
+
+    // Add the new tee
+    course.tees.push({
+      name: teeData.name.trim(),
+      rating: Number(teeData.rating),
+      slope: Number(teeData.slope),
+      numberOfFairways: Number(teeData.numberOfFairways)
+    });
+
+    await course.save();
+
+    res.json({
+      success: true,
+      data: mapCourseToResponse(course)
+    });
+  } catch (error) {
+    console.error('Error adding tee to course:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while adding tee'
+    });
+  }
+});
+
 export default router;</document_content>
 </document>
 <document index="8">
@@ -2889,7 +3897,9 @@ function mapRoundToResponse(round: any): Round {
     score: round.score,
     putts: round.putts,
     fairways: round.fairways,
+    greens: round.greens,
     notes: round.notes,
+    differential: round.differential,
     addedBy: round.addedBy.toString(),
     createdAt: round.createdAt,
     updatedAt: round.updatedAt
@@ -2966,10 +3976,18 @@ export default router;</document_content>
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { User, CreateUserInput } from 'shared';
+import { User } from 'shared';
 import UserModel, { IUser } from '../models/User';
+import { authenticateToken } from '../middleware/auth';
+import { Request } from 'express';
 
 const router = express.Router();
+
+router.use((req, res, next) => {
+  console.log('Auth Route:', req.method, req.path);
+  console.log('Headers:', req.headers);
+  next();
+});
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -2983,10 +4001,14 @@ const loginSchema = z.object({
 });
 
 function generateToken(user: IUser): string {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not defined');
+  }
+  
   return jwt.sign(
     { userId: user._id.toString(), email: user.email },
-    process.env.JWT_SECRET!,
-    { expiresIn: '24h' }
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' } // Extended token expiration to 30 days
   );
 }
 
@@ -2999,6 +4021,35 @@ function mapUserToResponse(user: IUser): User {
     updatedAt: user.updatedAt
   };
 }
+
+router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
+  try {
+    // The authenticateToken middleware has already verified the token
+    // and attached the user to the request
+    const user = await UserModel.findById(req.user?._id).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: mapUserToResponse(user),
+        token: req.headers.authorization?.split(' ')[1] // Return the same token
+      }
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
 
 router.post('/signup', async (req, res) => {
   try {
@@ -3017,14 +4068,17 @@ router.post('/signup', async (req, res) => {
     const user = new UserModel(validatedData);
     await user.save();
 
+    const token = generateToken(user);
+
     res.status(201).json({
       success: true,
       data: {
         user: mapUserToResponse(user),
-        token: generateToken(user)
+        token
       }
     });
   } catch (error) {
+    console.error('Signup error:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
@@ -3062,6 +4116,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = generateToken(user);
+
     res.json({
       success: true,
       data: {
@@ -3070,6 +4125,7 @@ router.post('/login', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Login error:', error);
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         success: false,
@@ -3077,7 +4133,6 @@ router.post('/login', async (req, res) => {
         errors: error.errors
       });
     }
-    console.error('Login error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -3153,7 +4208,9 @@ export interface Round extends BaseDocument {
     score: number;
     putts: number;
     fairways: number;
+    greens: number;
     notes?: string;
+    differential: number;
     addedBy: string;
 }
 export interface CreateRoundInput {
@@ -3163,6 +4220,7 @@ export interface CreateRoundInput {
     score: number;
     putts: number;
     fairways: number;
+    greens: number;
     notes?: string;
     addedBy: string;
 }
@@ -3200,7 +4258,9 @@ export interface Round extends BaseDocument {
   score: number;
   putts: number;
   fairways: number;
+  greens: number;
   notes?: string;
+  differential: number;
   addedBy: string;
 }
 
@@ -3211,6 +4271,7 @@ export interface CreateRoundInput {
   score: number;
   putts: number;
   fairways: number;
+  greens: number;
   notes?: string;
   addedBy: string;
 }</document_content>

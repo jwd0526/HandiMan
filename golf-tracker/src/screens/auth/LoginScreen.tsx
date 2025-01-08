@@ -193,6 +193,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   form: {
+    gap: 16,
     marginBottom: 24,
   },
   generalError: {

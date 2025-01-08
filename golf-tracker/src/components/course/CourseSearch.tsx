@@ -1,9 +1,7 @@
 // src/components/course/CourseSearch.tsx
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, Alert, TextInput, ActivityIndicator, Keyboard } from 'react-native';
 import { Course } from 'shared';
-import { FormInput } from '../FormInput';
-import { FormButton } from '../FormButton';
 import { searchCourses, createCourse } from '../../services/courses';
 import { useAuth } from '../../contexts/AuthContext';
 import { Search as SearchIcon, PlusCircle as PlusCircleIcon, MapPin as MapPinIcon } from 'lucide-react-native';
@@ -11,6 +9,8 @@ import { AddCourseModal } from './AddCourseModal';
 import { CourseList } from './CourseList';
 import { NoResults } from './CourseStates';
 import { InitialState } from './CourseStates';
+import debounce from 'lodash/debounce';
+import { BackButton } from '../BackButton';
 
 interface CourseSearchProps {
   onSelect: (course: Course) => void;
@@ -23,42 +23,55 @@ export function CourseSearch({ onSelect }: CourseSearchProps) {
   const [searching, setSearching] = useState(false);
   const { user } = useAuth();
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    
-    Keyboard.dismiss();
+  const performSearch = async (query: string) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
     setSearching(true);
     try {
-      const courses = await searchCourses(searchQuery);
-      setSearchResults(courses);
+      const courses = await searchCourses(query);
+      // Limit to 8 results
+      setSearchResults(courses.slice(0, 8));
     } catch (error) {
+      console.error('Search error:', error);
       Alert.alert('Error', 'Failed to search courses');
     } finally {
       setSearching(false);
     }
   };
 
+  // Debounce the search to avoid too many API calls
+  const debouncedSearch = useCallback(
+    debounce((query: string) => performSearch(query), 300),
+    []
+  );
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    debouncedSearch(text);
+  };
+
   return (
     <View style={styles.searchSection}>
-      <Text style={styles.searchTitle}>Find a Course</Text>
+      <View style={styles.header}>
+        <BackButton />
+        <Text style={styles.searchTitle}>Find a Course</Text>
+      </View>
       
       <View style={styles.searchInputContainer}>
+        <SearchIcon size={20} color="#666" style={styles.searchIcon} />
         <View style={styles.searchBar}>
-          <SearchIcon size={20} color="#666" style={styles.searchIcon} />
-          <FormInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search by course name or city"
-            onSubmitEditing={handleSearch}
+          <TextInput 
             style={styles.searchInput}
-            returnKeyType="search"
+            placeholderTextColor="#999"
+            placeholder="Search for a course"
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            autoCapitalize="words"
           />
         </View>
-        <FormButton
-          title="Search"
-          onPress={handleSearch}
-          loading={searching}
-        />
       </View>
 
       {searching ? (
@@ -91,42 +104,50 @@ export function CourseSearch({ onSelect }: CourseSearchProps) {
 
 const styles = StyleSheet.create({
   searchSection: {
-    padding: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    margin: 16,
+    gap: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   searchTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 16,
     color: '#333',
   },
   searchInputContainer: {
+    display: 'flex',
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 16,
   },
   searchBar: {
     flex: 1,
-    flexDirection: 'row',
+    display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    height: 'auto',
   },
   searchIcon: {
-    marginRight: 8,
+    width: 'auto',
+    height: 'auto',
   },
   searchInput: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 'auto',
-    borderWidth: 0,
-    backgroundColor: 'transparent',
+    flex: 1,
+    height: 48,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: '#fff',
   },
   loadingContainer: {
-    padding: 32,
+    padding: 20,
     alignItems: 'center',
   },
 });

@@ -25,6 +25,10 @@ interface CourseCardProps {
 }
 
 function CourseCard({ course, onSelect }: CourseCardProps) {
+  const locationString = [course.location.city, course.location.state]
+    .filter(Boolean)
+    .join(', ');
+
   return (
     <TouchableOpacity
       style={styles.courseCard}
@@ -32,12 +36,10 @@ function CourseCard({ course, onSelect }: CourseCardProps) {
     >
       <View style={styles.courseInfo}>
         <Text style={styles.courseName}>{course.name}</Text>
-        {course.location.city && (
+        {locationString && (
           <View style={styles.locationContainer}>
-            <MapPinIcon size={14} color="#666" />
-            <Text style={styles.locationText}>
-              {[course.location.city, course.location.state].filter(Boolean).join(', ')}
-            </Text>
+            <MapPinIcon size={14} color="#666" style={styles.locationIcon} />
+            <Text style={styles.locationText}>{locationString}</Text>
           </View>
         )}
       </View>
@@ -70,6 +72,7 @@ const styles = StyleSheet.create({
   },
   courseInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
   courseName: {
     fontSize: 16,
@@ -80,17 +83,22 @@ const styles = StyleSheet.create({
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    marginTop: 2,
+  },
+  locationIcon: {
+    marginRight: 4,
   },
   locationText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#666',
+    fontWeight: '400',
   },
   courseTeesContainer: {
     backgroundColor: '#f0f9ff',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
+    marginLeft: 12,
   },
   teesLabel: {
     fontSize: 12,

@@ -5,6 +5,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Course } from 'shared';
 import { FormInput } from '../FormInput';
 import { FormButton } from '../FormButton';
+import { TeeSelector } from '../course/TeeSelector';
+import { addTeeToCourse } from '../../services/courses';
 
 interface RoundDetailsProps {
   course: Course;
@@ -20,12 +22,15 @@ interface RoundDetailsProps {
   onPuttsChange: (putts: string) => void;
   fairways: string;
   onFairwaysChange: (fairways: string) => void;
+  greens: string;
+  onGreensChange: (greens: string) => void;
   notes: string;
   onNotesChange: (notes: string) => void;
   errors: {[key: string]: string};
   loading: boolean;
   onSubmit: () => void;
   onChangeCourse: () => void;
+  onCourseUpdate?: (course: Course) => void;
 }
 
 export function RoundDetails({
@@ -33,8 +38,6 @@ export function RoundDetails({
   selectedTee,
   onTeeSelect,
   date,
-  showDatePicker,
-  onShowDatePicker,
   onDateChange,
   score,
   onScoreChange,
@@ -42,77 +45,69 @@ export function RoundDetails({
   onPuttsChange,
   fairways,
   onFairwaysChange,
+  greens,
+  onGreensChange,
   notes,
   onNotesChange,
   errors,
   loading,
   onSubmit,
   onChangeCourse,
+  onCourseUpdate
 }: RoundDetailsProps) {
   return (
     <View style={styles.container}>
       <View style={styles.selectedCourse}>
-        <View style={styles.selectedCourseHeader}>
-          <View>
-            <Text style={styles.selectedCourseName}>{course.name}</Text>
-            {course.location.city && (
-              <Text style={styles.selectedCourseLocation}>
-                {[course.location.city, course.location.state]
-                  .filter(Boolean)
-                  .join(', ')}
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity
-            onPress={onChangeCourse}
-            style={styles.changeCourseButton}
-          >
-            <Text style={styles.changeCourseText}>Change</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.teeSelection}>
-          <Text style={styles.label}>Select Tee</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {course.tees.map((tee) => (
-              <TouchableOpacity
-                key={tee.name}
-                style={[
-                  styles.teeButton,
-                  selectedTee === tee.name && styles.teeButtonSelected
-                ]}
-                onPress={() => onTeeSelect(tee.name)}
-              >
-                <Text style={[
-                  styles.teeButtonText,
-                  selectedTee === tee.name && styles.teeButtonTextSelected
-                ]}>
-                  {tee.name}
+        <View >
+          <View style={styles.selectedCourseHeader}>
+            <View>
+              <Text style={styles.selectedCourseName}>{course.name}</Text>
+              {course.location.city && (
+                <Text style={styles.selectedCourseLocation}>
+                  {[course.location.city, course.location.state]
+                    .filter(Boolean)
+                    .join(', ')}
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-          {errors.tee && <Text style={styles.errorText}>{errors.tee}</Text>}
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={onChangeCourse}
+              style={styles.changeCourseButton}
+            >
+              <Text style={styles.changeCourseText}>Change</Text>
+            </TouchableOpacity>
+          </View>
+          <TeeSelector
+            course={course}
+            selectedTee={selectedTee}
+            onTeeSelect={onTeeSelect}
+            onAddTee={async (teeData) => {
+              try {
+                const updatedCourse = await addTeeToCourse(course._id, teeData);
+                if (onCourseUpdate) {
+                  onCourseUpdate(updatedCourse);
+                }
+                return updatedCourse;
+              } catch (error) {
+                console.error('Error adding tee:', error);
+                throw error;
+              }
+            }}
+          />
         </View>
-
-        <TouchableOpacity
-          style={styles.dateButton}
-          onPress={() => onShowDatePicker(true)}
-        >
+        <View style={styles.dateButton}>
           <Text style={styles.label}>Date</Text>
-          <Text style={styles.dateText}>
-            {date.toLocaleDateString()}
-          </Text>
-        </TouchableOpacity>
-
-        {showDatePicker && (
           <DateTimePicker
+            maximumDate={new Date()}
+            style={{
+              marginLeft: -10,
+            }}
             value={date}
             mode="date"
             display="default"
             onChange={onDateChange}
           />
-        )}
+        </View>
 
         <View style={styles.scoreInputs}>
           <FormInput
@@ -134,27 +129,39 @@ export function RoundDetails({
             editable={!loading}
           />
           <FormInput
-            label="Fairways Hit"
+            label="Fairways Hit (FIRs)"
             value={fairways}
             onChangeText={onFairwaysChange}
             keyboardType="numeric"
-            placeholder="Fairways hit"
+            placeholder="# of FIRs"
             error={errors.fairways}
+            editable={!loading}
+          />
+          <FormInput
+            label="Greens Hit (GIRs)"
+            value={greens}
+            onChangeText={onGreensChange}
+            keyboardType="numeric"
+            placeholder="# of GIRs"
+            error={errors.greens}
             editable={!loading}
           />
         </View>
 
         <FormInput
+          containerStyles={styles.notesContainer}
+          style={styles.notes}
           label="Notes"
           value={notes}
           onChangeText={onNotesChange}
           placeholder="Add notes about your round"
           multiline
-          numberOfLines={4}
+          numberOfLines={10}
           editable={!loading}
         />
 
         <FormButton
+          style={styles.saveButton}
           title="Save Round"
           onPress={onSubmit}
           loading={loading}
@@ -167,12 +174,12 @@ export function RoundDetails({
 const styles = StyleSheet.create({
   container: {
     padding: 16,
+    flex: 1,
+    maxHeight: '100%',
+    minHeight: '100%',
   },
   selectedCourse: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    minHeight: '100%',
   },
   selectedCourseHeader: {
     flexDirection: 'row',
@@ -181,7 +188,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   selectedCourseName: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#333',
   },
@@ -230,23 +237,25 @@ const styles = StyleSheet.create({
   dateButton: {
     marginBottom: 16,
   },
-  dateText: {
-    fontSize: 16,
-    color: '#333',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-  },
   scoreInputs: {
-    gap: 16,
+    gap: 10,
     marginBottom: 16,
   },
   errorText: {
     color: '#ff3b30',
     fontSize: 14,
     marginTop: 4,
+  },
+  notesContainer: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+  },
+  notes: {
+    flex: 1,
+  },
+  saveButton: {
+    marginTop: 16,
   },
 });

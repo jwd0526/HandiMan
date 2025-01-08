@@ -41,6 +41,8 @@ export async function createRound(roundData: CreateRoundInput): Promise<Round> {
       throw new Error('No auth token found');
     }
 
+    console.log('Creating round with data:', roundData);
+
     // Ensure date is an ISO string
     const formattedRoundData = {
       ...roundData,
@@ -58,20 +60,28 @@ export async function createRound(roundData: CreateRoundInput): Promise<Round> {
       body: JSON.stringify(formattedRoundData)
     });
 
+    const data = await response.json();
+    console.log('Server response:', data);
+
     if (!response.ok) {
-      // Try to parse error message
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.message || 'Failed to create round');
+      throw new Error(data.message || 'Failed to create round');
     }
 
-    const data = await response.json();
+    if (!data.success || !data.data) {
+      throw new Error('Invalid response format from server');
+    }
+
     // Convert date to Date object
     return {
       ...data.data,
       date: new Date(data.data.date)
     };
   } catch (error) {
-    console.error('Error creating round:', error);
-    throw error;
+    console.error('Error in createRound:', error);
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      throw new Error('Unknown error creating round');
+    }
   }
 }

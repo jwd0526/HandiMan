@@ -6,7 +6,9 @@ export interface Round extends BaseDocument {
     score: number;
     putts: number;
     fairways: number;
+    greens: number;
     notes?: string;
+    differential: number;
     addedBy: string;
 }
 export interface CreateRoundInput {
@@ -16,6 +18,7 @@ export interface CreateRoundInput {
     score: number;
     putts: number;
     fairways: number;
+    greens: number;
     notes?: string;
     addedBy: string;
 }

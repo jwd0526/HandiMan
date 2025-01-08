@@ -12,17 +12,20 @@ interface FormButtonProps {
   onPress: () => void;
   variant?: 'primary' | 'secondary';
   loading?: boolean;
+  style?: {};
 }
 
 export function FormButton({ 
   title, 
   onPress, 
   variant = 'primary',
-  loading = false 
+  loading = false,
+  style, 
 }: FormButtonProps) {
   return (
     <TouchableOpacity
       style={[
+        style,
         styles.button,
         variant === 'secondary' && styles.secondaryButton,
         loading && styles.buttonDisabled

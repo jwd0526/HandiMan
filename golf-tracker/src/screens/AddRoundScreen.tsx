@@ -17,10 +17,11 @@ export default function AddRoundScreen({ navigation }: Props) {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedTee, setSelectedTee] = useState('');
   const [date, setDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(true);
   const [score, setScore] = useState('');
   const [putts, setPutts] = useState('');
   const [fairways, setFairways] = useState('');
+  const [greens, setGreens] = useState('');
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
@@ -52,9 +53,21 @@ export default function AddRoundScreen({ navigation }: Props) {
 
   const handleSubmit = async () => {
     if (!validateForm() || !user || !selectedCourse) return;
-
+  
     setLoading(true);
     try {
+      console.log('Submitting round with data:', {
+        course: selectedCourse._id,
+        date,
+        tees: selectedTee,
+        score: Number(score),
+        putts: Number(putts),
+        fairways: Number(fairways),
+        greens: Number(greens),
+        notes,
+        addedBy: user._id,
+      });
+  
       await createRound({
         course: selectedCourse._id,
         date: date.toISOString(),
@@ -62,16 +75,24 @@ export default function AddRoundScreen({ navigation }: Props) {
         score: Number(score),
         putts: Number(putts),
         fairways: Number(fairways),
+        greens: Number(greens),
         notes: notes.trim() || undefined,
         addedBy: user._id,
       });
-
+  
       Alert.alert('Success', 'Round added successfully', [{
         text: 'OK',
         onPress: () => navigation.goBack()
       }]);
     } catch (error) {
-      Alert.alert('Error', 'Failed to add round');
+      console.error('Error submitting round:', error);
+      
+      // Show a more specific error message if available
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : 'Failed to add round. Please try again.';
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -79,7 +100,7 @@ export default function AddRoundScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView>
+      <ScrollView style={{ height: '100%' }}>
         {!selectedCourse ? (
           <CourseSearch onSelect={setSelectedCourse} />
         ) : (
@@ -102,6 +123,8 @@ export default function AddRoundScreen({ navigation }: Props) {
             onPuttsChange={setPutts}
             fairways={fairways}
             onFairwaysChange={setFairways}
+            greens={greens}
+            onGreensChange={setGreens}
             notes={notes}
             onNotesChange={setNotes}
             errors={errors}
@@ -117,7 +140,10 @@ export default function AddRoundScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    position: 'relative',
+    height: '100%',
     backgroundColor: '#f5f5f5',
   },
 });

@@ -71,4 +71,101 @@ router.post('/', authenticateToken, async (req: Request & { user?: { _id: string
   }
 });
 
+router.post('/:courseId/tees', authenticateToken, async (req: Request & { user?: { _id: string } }, res) => {
+  try {
+    const { courseId } = req.params;
+    const userId = req.user?._id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized'
+      });
+    }
+
+    // Find the course and verify ownership
+    const course = await CourseModel.findById(courseId);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: 'Course not found'
+      });
+    }
+
+    if (course.addedBy.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to modify this course'
+      });
+    }
+
+    // Validate tee data
+    const teeData = req.body;
+    if (!teeData.name || !teeData.rating || !teeData.slope || !teeData.numberOfFairways) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required tee information'
+      });
+    }
+
+    // Validate tee data values
+    if (typeof teeData.rating !== 'number' || teeData.rating < 0 || teeData.rating > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid course rating. Must be between 0 and 100'
+      });
+    }
+
+    if (typeof teeData.slope !== 'number' || teeData.slope < 55 || teeData.slope > 155) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid slope rating. Must be between 55 and 155'
+      });
+    }
+
+    if (typeof teeData.numberOfFairways !== 'number' || 
+        !Number.isInteger(teeData.numberOfFairways) || 
+        teeData.numberOfFairways < 0 || 
+        teeData.numberOfFairways > 18) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid number of fairways. Must be an integer between 0 and 18'
+      });
+    }
+
+    // Check if tee color already exists
+    const teeExists = course.tees.some(tee => 
+      tee.name.toLowerCase() === teeData.name.toLowerCase()
+    );
+
+    if (teeExists) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tee color already exists'
+      });
+    }
+
+    // Add the new tee
+    course.tees.push({
+      name: teeData.name.trim(),
+      rating: Number(teeData.rating),
+      slope: Number(teeData.slope),
+      numberOfFairways: Number(teeData.numberOfFairways)
+    });
+
+    await course.save();
+
+    res.json({
+      success: true,
+      data: mapCourseToResponse(course)
+    });
+  } catch (error) {
+    console.error('Error adding tee to course:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while adding tee'
+    });
+  }
+});
+
 export default router;

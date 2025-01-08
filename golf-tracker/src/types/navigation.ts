@@ -9,4 +9,5 @@ export type MainStackParamList = {
   Home: undefined;
   AddRound: undefined;
   AddCourse: undefined;
+  AllRounds: undefined;
 };

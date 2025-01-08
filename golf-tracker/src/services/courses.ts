@@ -58,3 +58,58 @@ export async function createCourse(courseData: CreateCourseInput): Promise<Cours
     throw error;
   }
 }
+
+
+export async function addTeeToCourse(
+  courseId: string,
+  teeData: {
+    name: string;
+    rating: number;
+    slope: number;
+    numberOfFairways: number;
+  }
+): Promise<Course> {
+  try {
+    const token = await getAuthToken();
+    if (!token) {
+      throw new Error('No auth token found');
+    }
+
+    console.log('Adding tee to course:', courseId, teeData);
+
+    const response = await fetch(`${API_URL}/courses/${courseId}/tees`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(teeData)
+    });
+
+    if (!response.ok) {
+      // Try to get error message from response
+      const errorData = await response.json().catch(() => null);
+      console.error('Server response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      });
+      
+      throw new Error(
+        errorData?.message || 
+        `Failed to add tee to course: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+    
+    if (!data.success || !data.data) {
+      throw new Error('Invalid response format from server');
+    }
+
+    return data.data as Course;
+  } catch (error) {
+    console.error('Error in addTeeToCourse:', error);
+    throw error;
+  }
+}
