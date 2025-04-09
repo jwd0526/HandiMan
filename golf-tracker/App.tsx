@@ -1,27 +1,34 @@
 // App.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
 // Screens
-import LandingScreen from './src/screens/auth/LandingScreen';
-import LoginScreen from './src/screens/auth/LoginScreen';
-import SignupScreen from './src/screens/auth/SignupScreen';
-import HomeScreen from './src/screens/HomeScreen';
-import AddRoundScreen from './src/screens/AddRoundScreen';
+import { LandingScreen } from './src/screens/auth/Landing';
+import { LoginScreen } from './src/screens/auth/Login';
+import { SignupScreen } from './src/screens/auth/Signup';
+import { HomeScreen } from './src/screens/Home';
+import { AddRoundScreen } from './src/screens/rounds/AddRound';
+import { AllRoundsScreen } from './src/screens/rounds/AllRounds';
+import { AddCourseScreen } from './src/screens/course/AddCourse';
 
-const AuthStack = createNativeStackNavigator();
-const MainStack = createNativeStackNavigator();
+// Types
+import { AuthStackParamList, MainStackParamList } from './src/config/navigation';
 
-// Separate the navigation components
-function AuthNavigator() {
+// Context Providers
+import { AuthProvider, useAuthContext } from './src/components/providers/AuthProvider';
+import { CourseProvider } from './src/components/providers/CourseProvider';
+
+
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const MainStack = createNativeStackNavigator<MainStackParamList>();
+
+const AuthNavigator = React.memo(() => {
   return (
     <AuthStack.Navigator
       id={null}
-      initialRouteName="Landing"
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#fff' }
@@ -32,9 +39,9 @@ function AuthNavigator() {
       <AuthStack.Screen name="Signup" component={SignupScreen} />
     </AuthStack.Navigator>
   );
-}
+});
 
-function MainNavigator() {
+const MainNavigator = React.memo(() => {
   return (
     <MainStack.Navigator
       id={null}
@@ -45,28 +52,35 @@ function MainNavigator() {
     >
       <MainStack.Screen name="Home" component={HomeScreen} />
       <MainStack.Screen name="AddRound" component={AddRoundScreen} />
+      <MainStack.Screen name="AllRounds" component={AllRoundsScreen} />
+      <MainStack.Screen name="AddCourse" component={AddCourseScreen} />
     </MainStack.Navigator>
   );
-}
+});
 
-// Create a separate Navigation component
-function Navigation() {
-  const { user } = useAuth();
+const Navigation = React.memo(() => {
+  const { user, loading } = useAuthContext();
+
+  const navigator = useMemo(() => {
+    if (loading) return null;
+    return user ? <MainNavigator /> : <AuthNavigator />;
+  }, [user, loading]);
   
   return (
     <NavigationContainer>
-      {user ? <MainNavigator /> : <AuthNavigator />}
+      {navigator}
     </NavigationContainer>
   );
-}
+});
 
-// Main App component
 export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <StatusBar style="auto" />
-        <Navigation />
+        <CourseProvider>
+          <StatusBar style="auto" />
+          <Navigation />
+        </CourseProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
