@@ -2,11 +2,38 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from 'shared';
-import UserModel from '../models/User';
+import UserModel, { IUser } from '../models/User';
 
 interface JwtPayload {
   userId: string;
   email: string;
+}
+
+// Helper function to convert MongoDB document to User type
+export function mapUserToResponse(user: IUser): User {
+  const userObj = user.toObject();
+  return {
+    _id: userObj._id.toString(),
+    email: userObj.email,
+    name: userObj.name,
+    createdAt: userObj.createdAt,
+    updatedAt: userObj.updatedAt,
+    savedCourses: (userObj.savedCourses || []).map((course: any) => ({
+      ...course,
+      _id: course._id.toString(),
+      addedBy: course.addedBy.toString()
+    })),
+    rounds: (userObj.rounds || []).map((round: any) => ({
+      ...round,
+      _id: round._id.toString(),
+      addedBy: round.addedBy.toString(),
+      course: {
+        ...round.course,
+        _id: round.course._id.toString(),
+        addedBy: round.course.addedBy.toString()
+      }
+    }))
+  };
 }
 
 export const authenticateToken = async (
@@ -15,12 +42,10 @@ export const authenticateToken = async (
   next: NextFunction
 ) => {
   console.log('Authenticating token...');
-  console.log('Auth header:', req.headers.authorization);
 
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
-      console.log('No Bearer token found');
       return res.status(401).json({
         success: false,
         message: 'No token provided'
@@ -28,7 +53,6 @@ export const authenticateToken = async (
     }
 
     const token = authHeader.split(' ')[1];
-    console.log('Token found:', token.substring(0, 10) + '...');
     
     if (!process.env.JWT_SECRET) {
       console.error('JWT_SECRET not configured');
@@ -41,7 +65,16 @@ export const authenticateToken = async (
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as JwtPayload;
     console.log('Token decoded:', decoded);
 
-    const user = await UserModel.findById(decoded.userId).select('-password');
+    const user = await UserModel.findById(decoded.userId)
+      .select('-password')
+      .populate({
+        path: 'rounds',
+        populate: {
+          path: 'course'
+        }
+      })
+      .populate('savedCourses');
+
     if (!user) {
       console.log('User not found for token');
       return res.status(401).json({
@@ -51,14 +84,7 @@ export const authenticateToken = async (
     }
 
     console.log('User found:', user.email);
-    req.user = {
-      _id: user._id.toString(),
-      email: user.email,
-      name: user.name,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
-    };
-
+    req.user = mapUserToResponse(user);
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);

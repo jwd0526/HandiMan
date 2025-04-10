@@ -30,10 +30,22 @@ function calculateDifferential(round: PopulatedRound): number {
   return Math.round(differential * 10) / 10;
 }
 
+function mapCourseToResponse(course: any) {
+  return {
+    _id: course._id.toString(),
+    name: course.name,
+    location: course.location,
+    tees: course.tees,
+    addedBy: course.addedBy.toString(),
+    createdAt: course.createdAt,
+    updatedAt: course.updatedAt
+  };
+}
+
 function mapRoundToResponse(round: PopulatedRound): Round {
   return {
     _id: round._id.toString(),
-    course: round.course._id.toString(),
+    course: mapCourseToResponse(round.course),
     date: round.date,
     tees: round.tees,
     score: round.score,
@@ -103,6 +115,10 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+interface PopulatedRound extends Omit<IRound, 'course'> {
+  course: ICourse;
+}
+
 router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userId = req.user?._id;
@@ -117,9 +133,19 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       .populate<{ course: ICourse }>('course')
       .sort({ date: -1 });
 
-    const populatedRounds = rounds as unknown as PopulatedRound[];
-    
-    const mappedRounds = populatedRounds.map(round => mapRoundToResponse(round));
+    const mappedRounds = rounds.map(round => {
+      const roundObj = round.toObject();
+      return {
+        ...roundObj,
+        _id: roundObj._id.toString(),
+        course: {
+          ...roundObj.course,
+          _id: roundObj.course._id.toString(),
+          addedBy: roundObj.course.addedBy.toString()
+        },
+        addedBy: roundObj.addedBy.toString()
+      };
+    });
 
     res.json({
       success: true,
@@ -130,6 +156,48 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching rounds'
+    });
+  }
+});
+
+// DELETE a round
+router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const userId = req.user?._id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    const roundId = req.params.id;
+    
+    // Find the round and make sure it belongs to the user
+    const round = await RoundModel.findOne({ 
+      _id: roundId,
+      addedBy: userId 
+    });
+    
+    if (!round) {
+      return res.status(404).json({
+        success: false,
+        message: 'Round not found or you do not have permission to delete it'
+      });
+    }
+    
+    // Delete the round
+    await RoundModel.deleteOne({ _id: roundId });
+    
+    res.json({
+      success: true,
+      message: 'Round deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting round:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting round'
     });
   }
 });

@@ -1,14 +1,20 @@
 // server/models/User.ts
 import mongoose from 'mongoose';
-import { User } from 'shared';
 import bcrypt from 'bcryptjs';
+import { ICourse } from './Course';
+import { IRound } from './Round';
 
-const SALT_ROUNDS = 10;
-
-export interface IUser extends Omit<User, '_id'> {
+export interface IUser {
   _id: mongoose.Types.ObjectId;
+  email: string;
   password: string;
+  name?: string;
+  savedCourses: mongoose.Types.ObjectId[] | ICourse[];
+  rounds: mongoose.Types.ObjectId[] | IRound[];
+  createdAt: Date;
+  updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  toObject(): any;
 }
 
 const userSchema = new mongoose.Schema({
@@ -21,7 +27,15 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  name: String
+  name: String,
+  savedCourses: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Course'
+  }],
+  rounds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Round'
+  }]
 }, {
   timestamps: true
 });
@@ -31,7 +45,7 @@ userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
 
   try {
-    const salt = await bcrypt.genSalt(SALT_ROUNDS);
+    const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
     next();
   } catch (error) {
@@ -48,6 +62,6 @@ userSchema.methods.comparePassword = async function(candidatePassword: string): 
   }
 };
 
-const UserModel = mongoose.model<IUser>('User', userSchema);
+const User = mongoose.model<IUser>('User', userSchema);
 
-export default UserModel;
+export default User;

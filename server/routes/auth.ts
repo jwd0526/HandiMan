@@ -4,10 +4,75 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { User } from 'shared';
 import UserModel, { IUser } from '../models/User';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, mapUserToResponse } from '../middleware/auth';
 import { Request } from 'express';
 
 const router = express.Router();
+
+async function getPopulatedUser(userId: string) {
+  return await UserModel.findById(userId)
+    .select('-password')
+    .populate({
+      path: 'rounds',
+      populate: {
+        path: 'course'
+      }
+    })
+    .populate('savedCourses');
+}
+
+router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
+  try {
+    if (!req.user?._id) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const user = await getPopulatedUser(req.user._id.toString());
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: user.toObject({
+          transform: (doc, ret) => {
+            ret._id = ret._id.toString();
+            ret.rounds = ret.rounds.map((round: any) => ({
+              ...round,
+              _id: round._id.toString(),
+              addedBy: round.addedBy.toString(),
+              course: {
+                ...round.course,
+                _id: round.course._id.toString(),
+                addedBy: round.course.addedBy.toString()
+              }
+            }));
+            ret.savedCourses = ret.savedCourses.map((course: any) => ({
+              ...course,
+              _id: course._id.toString(),
+              addedBy: course.addedBy.toString()
+            }));
+            return ret;
+          }
+        }),
+        token: req.headers.authorization?.split(' ')[1]
+      }
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
 
 router.use((req, res, next) => {
   console.log('Auth Route:', req.method, req.path);
@@ -38,15 +103,6 @@ function generateToken(user: IUser): string {
   );
 }
 
-function mapUserToResponse(user: IUser): User {
-  return {
-    _id: user._id.toString(),
-    email: user.email,
-    name: user.name,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt
-  };
-}
 
 router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
   try {
