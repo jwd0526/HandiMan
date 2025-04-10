@@ -83,7 +83,11 @@ export function useAuth(): UseAuth {
   const signup = useCallback(async (userData: CreateUserInput) => {
     try {
       setState(prev => ({ ...prev, loading: true, error: null }));
-      const user = await authService.signup(userData);
+      const { user, token } = await authService.signup(userData);
+      
+      // Store the token
+      await secureStorage.store(STORAGE_KEYS.AUTH_TOKEN, token);
+      
       setState({ user, loading: false, error: null });
     } catch (error) {
       console.error('Signup error:', error);
