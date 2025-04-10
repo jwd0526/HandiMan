@@ -8,6 +8,7 @@ export const styles = StyleSheet.create({
     left: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 10,
   },
   text: {
     fontSize: 16,
