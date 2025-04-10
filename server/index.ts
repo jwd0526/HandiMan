@@ -35,6 +35,10 @@ app.use(cors({
     'http://192.168.1.142:19006',
     'exp://192.168.1.142:19000',
     'exp://192.168.1.142:19001',
+    'http://192.168.1.242:19000',
+    'http://192.168.1.242:19006',
+    'exp://192.168.1.242:19000',
+    'exp://192.168.1.242:19001',
     /^exp:\/\/.*$/,       // All Expo URLs
     /^http:\/\/localhost:.*/, // All localhost URLs
     /^http:\/\/192\.168\..*/, // All 192.168 local network IPs
@@ -63,11 +67,21 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/rounds', roundRoutes);
 app.use('/api/goals', goalRoutes);
 
-// Health check endpoint
+// Health check endpoints
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy',
     timestamp: new Date().toISOString()
+  });
+});
+
+// Root API endpoint for connection testing
+app.get('/api', (req, res) => {
+  res.json({
+    status: 'API is working',
+    timestamp: new Date().toISOString(),
+    message: 'HandiMan API is running correctly',
+    endpoints: ['/api/auth', '/api/courses', '/api/rounds', '/api/goals']
   });
 });
 
