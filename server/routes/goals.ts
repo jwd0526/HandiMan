@@ -73,7 +73,7 @@ interface AuthRequest extends Request {
 const router = express.Router();
 
 function mapGoalToResponse(goal: IGoal): Goal {
-  return {
+  const mappedGoal = {
     _id: goal._id.toString(),
     name: goal.name,
     targetValue: goal.targetValue,
@@ -87,6 +87,15 @@ function mapGoalToResponse(goal: IGoal): Goal {
     createdAt: goal.createdAt,
     updatedAt: goal.updatedAt
   };
+  
+  // Log putts goals to track issues
+  if (goal.category === 'putts') {
+    console.log(`[SERVER] Mapping putts goal to response: ID: ${mappedGoal._id}, Name: ${mappedGoal.name}, ` +
+                `Value: ${mappedGoal.currentValue}, Raw Value: ${goal.currentValue}, ` +
+                `Achieved: ${mappedGoal.achieved}`);
+  }
+  
+  return mappedGoal;
 }
 
 // Debug middleware for goals routes
@@ -151,13 +160,20 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
       });
     }
 
+    // Log request body for debugging
+    console.log(`[SERVER] Creating goal: category=${req.body.category}, currentValue=${req.body.currentValue}, achieved=${req.body.achieved}`);
+    
+    // Allow achieved and completedAt to be set on creation
     const goal = new GoalModel({
       ...req.body,
       addedBy: userId,
-      achieved: false
+      // Only override achieved if not provided
+      achieved: req.body.achieved !== undefined ? req.body.achieved : false
     });
 
     await goal.save();
+    
+    console.log(`[SERVER] Created goal: ID=${goal._id}, currentValue=${goal.currentValue}, achieved=${goal.achieved}`);
 
     res.status(201).json({
       success: true,
@@ -232,15 +248,52 @@ router.patch('/:id/achievement', authenticateToken, async (req: AuthRequest, res
     const goalId = req.params.id;
     
     // Update object based on whether goal is being achieved or unmarked
-    const updateObj = achieved 
-      ? { achieved, completedAt: req.body.completedAt || new Date() }
-      : { achieved, $unset: { completedAt: "" } };
+    let updateObj: any = {};
+    
+    if (achieved) {
+      updateObj = { 
+        achieved, 
+        completedAt: req.body.completedAt || new Date()
+      };
+      
+      // If currentValue is provided, store it
+      if (req.body.currentValue !== undefined) {
+        updateObj.currentValue = req.body.currentValue;
+        console.log(`Saving currentValue ${req.body.currentValue} for goal ${goalId}`);
+      } else {
+        // Find the current goal to ensure we don't lose the value
+        const currentGoal = await GoalModel.findById(goalId);
+        if (currentGoal && currentGoal.currentValue !== undefined) {
+          updateObj.currentValue = currentGoal.currentValue;
+          console.log(`PRESERVING existing currentValue ${currentGoal.currentValue} for goal ${goalId}`);
+        } else {
+          console.log(`WARNING: No currentValue provided for goal ${goalId} when marking as achieved`);
+        }
+      }
+    } else {
+      updateObj = { 
+        achieved, 
+        $unset: { completedAt: "" } 
+      };
+    }
+    
+    // If this is a putts goal, log the update operation
+    const existingGoal = await GoalModel.findOne({ _id: goalId, addedBy: userId });
+    if (existingGoal && existingGoal.category === 'putts') {
+      console.log(`[SERVER] Before update putts goal ${goalId}: currentValue=${existingGoal.currentValue}, achieved=${existingGoal.achieved}`);
+      console.log(`[SERVER] Update object for putts goal: ${JSON.stringify(updateObj)}`);
+    }
     
     const goal = await GoalModel.findOneAndUpdate(
       { _id: goalId, addedBy: userId },
       updateObj,
       { new: true }
     );
+    
+    // Log the result for putts goals
+    if (goal && goal.category === 'putts') {
+      console.log(`[SERVER] After update putts goal ${goalId}: currentValue=${goal.currentValue}, achieved=${goal.achieved}`);
+    }
 
     if (!goal) {
       return res.status(404).json({

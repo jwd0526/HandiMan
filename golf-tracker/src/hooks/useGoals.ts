@@ -4,12 +4,22 @@ import type { Goal, CreateGoalInput, Round } from 'shared';
 import { goalService } from '../services/api/goals';
 import { useRounds } from './useRounds';
 import { calculateHandicap } from '../utils/handicap';
+import { useAuthContext } from '../components/providers/AuthProvider';
 
 export const useGoals = () => {
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const { goals: authGoals, activeGoals, completedGoals, user } = useAuthContext();
+  const [goals, setGoals] = useState<Goal[]>(authGoals || []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { rounds, getUserRounds } = useRounds();
+
+  // Use goals from auth context when they change
+  useEffect(() => {
+    if (authGoals?.length) {
+      console.log('Updating goals from auth context:', authGoals);
+      setGoals(authGoals);
+    }
+  }, [authGoals]);
 
   // Fetch all goals for the user
   const fetchGoals = useCallback(async () => {
@@ -34,20 +44,32 @@ export const useGoals = () => {
   const addGoal = useCallback(async (goalData: CreateGoalInput) => {
     setError(null);
     
-    // Get initial current value for the goal based on category
+    // Get best values for initial current value based on category
     let initialCurrentValue = 0;
     
-    // Pre-calculate the current value based on the goal category
+    // Pre-calculate the current value based on the goal category using BEST values not averages
     if (rounds.length > 0) {
       const currentHandicap = calculateHandicap(rounds);
       const bestScore = rounds.reduce((best, round) => 
-        (round.score && round.score < best) ? round.score : best, 
-        999
+        (round.score && round.score < best) ? round.score : best, 999
       );
-      const recentRounds = rounds.slice(0, Math.min(5, rounds.length));
-      const avgFairways = recentRounds.reduce((sum, round) => sum + (round.fairways || 0), 0) / recentRounds.length;
-      const avgGreens = recentRounds.reduce((sum, round) => sum + (round.greens || 0), 0) / recentRounds.length;
-      const avgPutts = recentRounds.reduce((sum, round) => sum + (round.putts || 0), 0) / recentRounds.length;
+      
+      // For fairways and greens - highest values are best
+      const bestFairways = rounds.reduce((best, round) => Math.max(best, round.fairways || 0), 0);
+      const bestGreens = rounds.reduce((best, round) => Math.max(best, round.greens || 0), 0);
+      
+      // For putts - lowest value is best (not average)
+      const puttsValues = rounds
+        .filter(round => round.putts && round.putts > 0)
+        .map(round => round.putts);
+      
+      const bestPutts = puttsValues.length > 0 ? Math.min(...puttsValues) : 0;
+      
+      // Log putts values for debugging
+      if (goalData.category === 'putts' && puttsValues.length > 0) {
+        console.log(`[addGoal] All putts values: ${puttsValues.join(', ')}`);
+        console.log(`[addGoal] Best (lowest) putts value: ${bestPutts}`);
+      }
       
       switch (goalData.category) {
         case 'handicap':
@@ -57,13 +79,13 @@ export const useGoals = () => {
           initialCurrentValue = bestScore !== 999 ? bestScore : 0;
           break;
         case 'fairways':
-          initialCurrentValue = Math.round(avgFairways);
+          initialCurrentValue = bestFairways;
           break;
         case 'greens':
-          initialCurrentValue = Math.round(avgGreens);
+          initialCurrentValue = bestGreens;
           break;
         case 'putts':
-          initialCurrentValue = Math.round(avgPutts);
+          initialCurrentValue = bestPutts || 0;
           break;
       }
     }
@@ -71,7 +93,7 @@ export const useGoals = () => {
     // Create temporary optimistic goal with temporary ID
     const tempGoal: Goal = {
       _id: `temp_${Date.now()}`,
-      userId: 'current',
+      addedBy: user?._id || 'current',
       ...goalData,
       achieved: false,
       currentValue: initialCurrentValue,
@@ -79,14 +101,40 @@ export const useGoals = () => {
       updatedAt: new Date()
     };
     
+    // Check if goal is already achieved
+    let shouldBeAchieved = false;
+    if (initialCurrentValue > 0) {
+      switch (goalData.category) {
+        case 'handicap':
+        case 'scoring':
+        case 'putts':
+          // Lower is better
+          shouldBeAchieved = initialCurrentValue <= goalData.targetValue;
+          break;
+        case 'fairways':
+        case 'greens':
+          // Higher is better
+          shouldBeAchieved = initialCurrentValue >= goalData.targetValue;
+          break;
+      }
+    }
+    
+    // Update achieved status if needed
+    if (shouldBeAchieved) {
+      tempGoal.achieved = true;
+      tempGoal.completedAt = new Date();
+    }
+    
     // Add to UI immediately at the beginning of the list (active goals first)
     setGoals(prev => [tempGoal, ...prev]);
     
     try {
-      // Make API call in background
+      // Make API call in background with the correct current value
       const newGoal = await goalService.createGoal({
         ...goalData,
-        currentValue: initialCurrentValue
+        currentValue: initialCurrentValue,
+        achieved: shouldBeAchieved,
+        completedAt: shouldBeAchieved ? new Date() : undefined
       });
       
       // Update with real goal data
@@ -102,7 +150,7 @@ export const useGoals = () => {
       setError('Failed to create goal. Please try again.');
       throw err;
     }
-  }, [rounds]);
+  }, [rounds, user]);
 
   // Update an existing goal
   const updateGoal = useCallback(async (goalId: string, goalData: Partial<Goal>) => {
@@ -144,26 +192,123 @@ export const useGoals = () => {
     try {
       const now = new Date();
       
-      // Optimistically update UI first with completed date
-      setGoals(prev => prev.map(goal => 
-        goal._id === goalId ? {
-          ...goal, 
-          achieved,
-          // Add completedAt date when marking as achieved, remove when marking as not achieved
-          completedAt: achieved ? now : undefined
-        } : goal
-      ));
+      // Find the goal to ensure we have the latest stats
+      const targetGoal = goals.find(g => g._id === goalId);
+      if (!targetGoal) {
+        throw new Error('Goal not found');
+      }
       
-      // Then make API call without blocking UI
-      const updatedGoal = await goalService.toggleGoalAchievement(goalId, achieved, 
-        achieved ? now.toISOString() : undefined);
-      
-      // Update with server response once complete
-      setGoals(prev => prev.map(goal => 
-        goal._id === goalId ? updatedGoal : goal
-      ));
-      
-      return updatedGoal;
+      // When marking as achieved, ensure we have the latest currentValue from stats
+      if (rounds.length > 0) {
+        // Calculate best values for each stat type - use same logic as checkAndFindAchievedGoals
+        // For handicap
+        const currentHandicap = calculateHandicap(rounds);
+        
+        // For scoring - lowest score is best
+        const bestScore = rounds.reduce((best, round) => 
+          (round.score && round.score < best) ? round.score : best, 999
+        );
+        
+        // For fairways and greens - highest values are best
+        const bestFairways = rounds.reduce((best, round) => Math.max(best, round.fairways || 0), 0);
+        const bestGreens = rounds.reduce((best, round) => Math.max(best, round.greens || 0), 0);
+        
+        // For putts - lowest value is best
+        const puttsValues = rounds
+          .filter(round => round.putts && round.putts > 0)
+          .map(round => round.putts);
+        
+        const bestPutts = puttsValues.length > 0 ? Math.min(...puttsValues) : 99;
+        
+        if (puttsValues.length > 0) {
+          console.log(`[toggleAchievement] All putts values: ${puttsValues.join(', ')}`);
+          console.log(`[toggleAchievement] Best (lowest) putts value: ${bestPutts}`);
+        }
+        
+        // Update the current value based on category
+        let currentValue = targetGoal.currentValue || 0;
+        let automaticAchievement = false;
+
+        switch (targetGoal.category) {
+          case 'handicap':
+            currentValue = currentHandicap;
+            automaticAchievement = currentHandicap <= targetGoal.targetValue;
+            break;
+            
+          case 'scoring':
+            currentValue = bestScore !== 999 ? bestScore : (targetGoal.currentValue || 0);
+            automaticAchievement = bestScore !== 999 && bestScore <= targetGoal.targetValue;
+            break;
+            
+          case 'fairways':
+            currentValue = bestFairways;
+            automaticAchievement = bestFairways >= targetGoal.targetValue;
+            break;
+            
+          case 'greens':
+            currentValue = bestGreens;
+            automaticAchievement = bestGreens >= targetGoal.targetValue;
+            break;
+            
+          case 'putts':
+            if (puttsValues.length > 0) {
+              currentValue = bestPutts;
+              automaticAchievement = bestPutts <= targetGoal.targetValue;
+              console.log(`Toggling goal ${goalId} achievement to ${automaticAchievement} with currentValue: ${currentValue}`);
+            }
+            break;
+        }
+        
+        // If manually marking as achieved or if stats indicate automatic achievement
+        const shouldBeAchieved = achieved || automaticAchievement;
+        
+        // Optimistically update UI first with completed date and current value
+        setGoals(prev => prev.map(goal => 
+          goal._id === goalId ? {
+            ...goal, 
+            achieved: shouldBeAchieved,
+            currentValue, // Use the latest value
+            completedAt: shouldBeAchieved ? now : undefined
+          } : goal
+        ));
+        
+        // Then make API call with the current value
+        const updatedGoal = await goalService.toggleGoalAchievement(
+          goalId, 
+          shouldBeAchieved, 
+          shouldBeAchieved ? now.toISOString() : undefined,
+          currentValue 
+        );
+        
+        // Update with server response once complete
+        setGoals(prev => prev.map(goal => 
+          goal._id === goalId ? updatedGoal : goal
+        ));
+        
+        return updatedGoal;
+      } else {
+        // For unmarking as achieved, just toggle the flag
+        // Optimistically update UI first
+        setGoals(prev => prev.map(goal => 
+          goal._id === goalId ? {
+            ...goal, 
+            achieved,
+            // Remove completedAt date when marking as not achieved
+            completedAt: achieved ? now : undefined
+          } : goal
+        ));
+        
+        // Then make API call without blocking UI
+        const updatedGoal = await goalService.toggleGoalAchievement(goalId, achieved, 
+          achieved ? now.toISOString() : undefined);
+        
+        // Update with server response once complete
+        setGoals(prev => prev.map(goal => 
+          goal._id === goalId ? updatedGoal : goal
+        ));
+        
+        return updatedGoal;
+      }
     } catch (err) {
       console.error('Error in toggleAchievement:', err);
       // Revert to original state on error
@@ -171,7 +316,7 @@ export const useGoals = () => {
       setError('Failed to update goal status. Please try again.');
       throw err;
     }
-  }, []);
+  }, [goals, rounds]);
 
   // Check if goals are achieved based on rounds data
   // Simplified version that doesn't trigger update loops
@@ -181,11 +326,22 @@ export const useGoals = () => {
     // Get current handicap
     const currentHandicap = calculateHandicap(rounds);
     
-    // Calculate averages
+    // Calculate stats using raw values
     const recentRounds = rounds.slice(0, Math.min(5, rounds.length));
+    // Raw values (not percentages)
     const avgFairways = recentRounds.reduce((sum, round) => sum + (round.fairways || 0), 0) / recentRounds.length;
     const avgGreens = recentRounds.reduce((sum, round) => sum + (round.greens || 0), 0) / recentRounds.length;
     const avgPutts = recentRounds.reduce((sum, round) => sum + (round.putts || 0), 0) / recentRounds.length;
+    
+    // Track highest (best) fairways and greens
+    const bestFairways = rounds.reduce((best, round) => Math.max(best, round.fairways || 0), 0);
+    const bestGreens = rounds.reduce((best, round) => Math.max(best, round.greens || 0), 0);
+    
+    // Calculate best putts (lowest number)
+    const bestPutts = rounds.reduce((best, round) => 
+      (round.putts && (best === 0 || round.putts < best)) ? round.putts : best, 
+      0
+    );
     
     // Find best score
     const bestScore = rounds.reduce((best, round) => 
@@ -207,13 +363,16 @@ export const useGoals = () => {
           currentValue = bestScore !== 999 ? bestScore : (goal.currentValue || 0);
           break;
         case 'fairways':
-          currentValue = Math.round(avgFairways);
+          // For fairways, use the best (highest) value
+          currentValue = bestFairways > 0 ? bestFairways : (goal.currentValue || 0);
           break;
         case 'greens':
-          currentValue = Math.round(avgGreens);
+          // For greens, use the best (highest) value
+          currentValue = bestGreens > 0 ? bestGreens : (goal.currentValue || 0);
           break;
         case 'putts':
-          currentValue = Math.round(avgPutts);
+          // For putts we want the best (lowest) value, not the average
+          currentValue = bestPutts > 0 ? bestPutts : (goal.currentValue || 0);
           break;
       }
       
@@ -263,16 +422,30 @@ export const useGoals = () => {
   const checkAndFindAchievedGoals = useCallback(() => {
     if (goals.length === 0 || rounds.length === 0) return [];
     
-    // Get current values
+    // Calculate best values for each stat type
+    // For handicap
     const currentHandicap = calculateHandicap(rounds);
-    const recentRounds = rounds.slice(0, Math.min(5, rounds.length));
-    const avgFairways = recentRounds.reduce((sum, round) => sum + (round.fairways || 0), 0) / recentRounds.length;
-    const avgGreens = recentRounds.reduce((sum, round) => sum + (round.greens || 0), 0) / recentRounds.length;
-    const avgPutts = recentRounds.reduce((sum, round) => sum + (round.putts || 0), 0) / recentRounds.length;
+    
+    // For scoring - lowest score is best
     const bestScore = rounds.reduce((best, round) => 
-      (round.score && round.score < best) ? round.score : best, 
-      999
+      (round.score && round.score < best) ? round.score : best, 999
     );
+    
+    // For fairways and greens - highest values are best
+    const bestFairways = rounds.reduce((best, round) => Math.max(best, round.fairways || 0), 0);
+    const bestGreens = rounds.reduce((best, round) => Math.max(best, round.greens || 0), 0);
+    
+    // For putts - lowest value is best
+    const puttsValues = rounds
+      .filter(round => round.putts && round.putts > 0)
+      .map(round => round.putts);
+    
+    const bestPutts = puttsValues.length > 0 ? Math.min(...puttsValues) : 99;
+    
+    if (puttsValues.length > 0) {
+      console.log(`All putts values: ${puttsValues.join(', ')}`);
+      console.log(`Best (lowest) putts value: ${bestPutts}`);
+    }
     
     // Update goals locally and check if any were achieved
     const updatedGoals: Goal[] = [];
@@ -289,21 +462,29 @@ export const useGoals = () => {
           currentValue = currentHandicap;
           achieved = currentHandicap <= goal.targetValue;
           break;
+          
         case 'scoring':
           currentValue = bestScore !== 999 ? bestScore : (goal.currentValue || 0);
           achieved = bestScore !== 999 && bestScore <= goal.targetValue;
           break;
+          
         case 'fairways':
-          currentValue = Math.round(avgFairways);
-          achieved = avgFairways >= goal.targetValue;
+          currentValue = bestFairways;
+          achieved = bestFairways >= goal.targetValue;
           break;
+          
         case 'greens':
-          currentValue = Math.round(avgGreens);
-          achieved = avgGreens >= goal.targetValue;
+          currentValue = bestGreens;
+          achieved = bestGreens >= goal.targetValue;
           break;
+          
         case 'putts':
-          currentValue = Math.round(avgPutts);
-          achieved = avgPutts <= goal.targetValue;
+          // For putts, use the best (lowest) value
+          if (puttsValues.length > 0) {
+            currentValue = bestPutts;
+            achieved = bestPutts <= goal.targetValue;
+          }
+          console.log(`Putts goal: target=${goal.targetValue}, best=${bestPutts}, current=${currentValue}, achieved=${achieved}`);
           break;
       }
       
@@ -316,9 +497,8 @@ export const useGoals = () => {
       if (achieved && !goal.achieved) {
         achievedGoals.push(updatedGoal);
         
-        // Mark the goal as achieved in the database
-        // Don't wait for this to complete
-        goalService.toggleGoalAchievement(goal._id, true)
+        // Mark the goal as achieved in the database with the current value
+        goalService.toggleGoalAchievement(goal._id, true, undefined, currentValue)
           .catch(err => console.error('Error auto-marking goal as achieved:', err));
       }
       
@@ -350,7 +530,11 @@ export const useGoals = () => {
     removeGoal,
     toggleAchievement,
     checkGoalAchievements,
+    checkAndFindAchievedGoals,  // Export this function to be used by the context
     newlyAchievedGoals,
-    setNewlyAchievedGoals
+    setNewlyAchievedGoals,
+    // Add easy access to filtered goals
+    activeGoals: activeGoals || goals.filter(goal => !goal.achieved),
+    completedGoals: completedGoals || goals.filter(goal => goal.achieved)
   };
 };

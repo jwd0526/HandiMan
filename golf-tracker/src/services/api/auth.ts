@@ -93,8 +93,14 @@ class AuthService {
       if (!response.ok) return null;
 
       const data = await response.json();
-      return data.data?.user || null;
-    } catch {
+      const user = data.data?.user || null;
+      
+      // Log the returned user data to help with debugging
+      console.log('validateToken response data:', data);
+      
+      return user;
+    } catch (error) {
+      console.error('Error validating token:', error);
       return null;
     }
   }

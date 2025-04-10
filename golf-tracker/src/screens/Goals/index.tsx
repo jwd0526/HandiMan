@@ -569,7 +569,7 @@ export function GoalsScreen({ navigation }: Props) {
               <View style={styles.completedDateContainer}>
                 <Trophy size={14} color="#4CAF50" />
                 <Text style={styles.completedDateText}>
-                  Completed: {formatDate(goal.completedAt)}
+                  Completed: {formatDate(typeof goal.completedAt === 'string' ? goal.completedAt : goal.completedAt?.toISOString())}
                 </Text>
               </View>
             )}
@@ -590,38 +590,49 @@ export function GoalsScreen({ navigation }: Props) {
                 goal.achieved && styles.achievedText
               ]}>
                 Target: {goal.targetValue}
-                {goal.category === 'handicap' && ''}
+                {goal.category === 'handicap' && ' HCP'}
                 {goal.category === 'scoring' && ' strokes'}
-                {goal.category === 'fairways' && '%'}
-                {goal.category === 'greens' && '%'}
+                {goal.category === 'fairways' && ' FIRs'}
+                {goal.category === 'greens' && ' GIRs'}
                 {goal.category === 'putts' && ' putts'}
               </Text>
               
+              {/* Always show current value for all goals */}
               {goal.currentValue !== undefined && (
-                <Text style={[
-                  styles.goalCurrent,
-                  goal.achieved && styles.achievedText
-                ]}>
-                  Current: {goal.currentValue}
-                  {goal.category === 'handicap' && ''}
-                  {goal.category === 'scoring' && ' strokes'}
-                  {goal.category === 'fairways' && '%'}
-                  {goal.category === 'greens' && '%'}
-                  {goal.category === 'putts' && ' putts'}
-                </Text>
+                <>
+                  <Text style={[
+                    styles.goalCurrent,
+                    goal.achieved && styles.achievedText
+                  ]}>
+                    {goal.achieved ? "Best: " : "Current: "}{goal.currentValue}
+                    {goal.category === 'handicap' && ' HCP'}
+                    {goal.category === 'scoring' && ' strokes'}
+                    {goal.category === 'fairways' && ' FIRs'}
+                    {goal.category === 'greens' && ' GIRs'}
+                    {goal.category === 'putts' && ' putts'}
+                  </Text>
+                  {/* Logging happens outside of JSX */}
+                  {goal.category === 'putts' ? (
+                    (() => {
+                      console.log(`[Goal Display] Putts goal: ${goal.name}, ID: ${goal._id}, Value: ${goal.currentValue}, Achieved: ${goal.achieved}`);
+                      return null;
+                    })()
+                  ) : null}
+                </>
               )}
               
-              {/* Progress bar */}
-              <View style={styles.progressBarContainer}>
-                <View 
-                  style={[
-                    styles.progressBar, 
-                    { width: `${progressPercent}%` },
-                    goal.achieved && styles.progressBarCompleted,
-                    deadlinePassed && !goal.achieved && styles.progressBarExpired
-                  ]} 
-                />
-              </View>
+              {/* Progress bar - only show for active goals */}
+              {!goal.achieved && (
+                <View style={styles.progressBarContainer}>
+                  <View 
+                    style={[
+                      styles.progressBar, 
+                      { width: `${progressPercent}%` },
+                      deadlinePassed && styles.progressBarExpired
+                    ]} 
+                  />
+                </View>
+              )}
             </View>
             
             {goal.description && (
@@ -636,14 +647,14 @@ export function GoalsScreen({ navigation }: Props) {
                   deadlinePassed && styles.expiredDate
                 ]}>
                   {deadlinePassed ? "Deadline passed: " : "Target date: "}
-                  {formatDate(goal.targetDate)}
+                  {formatDate(typeof goal.targetDate === 'string' ? goal.targetDate : goal.targetDate?.toISOString())}
                 </Text>
               </View>
             )}
             
             {goal.achieved && (
               <View style={styles.achievedBadge}>
-                <Text style={styles.achievedBadgeText}>Goal Achieved!</Text>
+                <Text style={styles.achievedBadgeText}>Completed</Text>
               </View>
             )}
           </View>
@@ -755,7 +766,7 @@ export function GoalsScreen({ navigation }: Props) {
   );
 
   if (loading && goals.length === 0) {
-    return <LoadingScreen message="Loading goals..." />;
+    return <LoadingScreen />;
   }
 
   if (error) {

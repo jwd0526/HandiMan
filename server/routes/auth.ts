@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { User } from 'shared';
 import UserModel, { IUser } from '../models/User';
+import GoalModel from '../models/Goal';
 import { authenticateToken, mapUserToResponse } from '../middleware/auth';
 import { Request } from 'express';
 
@@ -20,59 +21,6 @@ async function getPopulatedUser(userId: string) {
     })
     .populate('savedCourses');
 }
-
-router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
-  try {
-    if (!req.user?._id) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    const user = await getPopulatedUser(req.user._id.toString());
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        user: user.toObject({
-          transform: (doc, ret) => {
-            ret._id = ret._id.toString();
-            ret.rounds = ret.rounds.map((round: any) => ({
-              ...round,
-              _id: round._id.toString(),
-              addedBy: round.addedBy.toString(),
-              course: {
-                ...round.course,
-                _id: round.course._id.toString(),
-                addedBy: round.course.addedBy.toString()
-              }
-            }));
-            ret.savedCourses = ret.savedCourses.map((course: any) => ({
-              ...course,
-              _id: course._id.toString(),
-              addedBy: course.addedBy.toString()
-            }));
-            return ret;
-          }
-        }),
-        token: req.headers.authorization?.split(' ')[1]
-      }
-    });
-  } catch (error) {
-    console.error('Token validation error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
 
 router.use((req, res, next) => {
   console.log('Auth Route:', req.method, req.path);
@@ -103,25 +51,59 @@ function generateToken(user: IUser): string {
   );
 }
 
-
 router.get('/validate', authenticateToken, async (req: Request & { user?: IUser }, res) => {
   try {
-    // The authenticateToken middleware has already verified the token
-    // and attached the user to the request
-    const user = await UserModel.findById(req.user?._id).select('-password');
-    
-    if (!user) {
+    if (!req.user?._id) {
       return res.status(401).json({
         success: false,
         message: 'User not found'
       });
     }
 
+    // Get user with populated data including rounds and courses
+    const user = await getPopulatedUser(req.user._id.toString());
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Also fetch the user's goals
+    const goals = await GoalModel.find({ addedBy: req.user._id });
+
     res.json({
       success: true,
       data: {
-        user: mapUserToResponse(user),
-        token: req.headers.authorization?.split(' ')[1] // Return the same token
+        user: {
+          ...user.toObject({
+            transform: (doc, ret) => {
+              ret._id = ret._id.toString();
+              ret.rounds = ret.rounds.map((round: any) => ({
+                ...round,
+                _id: round._id.toString(),
+                addedBy: round.addedBy.toString(),
+                course: {
+                  ...round.course,
+                  _id: round.course._id.toString(),
+                  addedBy: round.course.addedBy.toString()
+                }
+              }));
+              ret.savedCourses = ret.savedCourses.map((course: any) => ({
+                ...course,
+                _id: course._id.toString(),
+                addedBy: course.addedBy.toString()
+              }));
+              return ret;
+            }
+          }),
+          goals: goals.map((goal: any) => ({
+            ...goal.toObject(),
+            _id: goal._id.toString(),
+            addedBy: goal.addedBy.toString()
+          }))
+        },
+        token: req.headers.authorization?.split(' ')[1]
       }
     });
   } catch (error) {

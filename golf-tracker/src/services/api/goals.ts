@@ -137,7 +137,16 @@ class GoalService {
       console.log('Response headers:', JSON.stringify(Object.fromEntries([...response.headers])));
       
       const data = await this.handleResponse(response);
-      return Array.isArray(data.data) ? data.data : [];
+      const goals = Array.isArray(data.data) ? data.data : [];
+      
+      // Log any putts goals to help with debugging
+      goals.forEach(goal => {
+        if (goal.category === 'putts') {
+          console.log(`[API] Received putts goal: ${goal.name}, ID: ${goal._id}, Value: ${goal.currentValue}, Achieved: ${goal.achieved}`);
+        }
+      });
+      
+      return goals;
     } catch (error) {
       console.error('Error fetching goals:', error);
       throw error;
@@ -147,9 +156,15 @@ class GoalService {
   /**
    * Create a new goal
    */
-  async createGoal(goalData: CreateGoalInput): Promise<Goal> {
+  async createGoal(goalData: CreateGoalInput & { achieved?: boolean, completedAt?: Date }): Promise<Goal> {
     try {
       const headers = await this.getHeaders();
+      
+      // Log the request body for debugging
+      if (goalData.category === 'putts') {
+        console.log(`[API] Creating putts goal with initial value: ${goalData.currentValue}, achieved: ${goalData.achieved}`);
+      }
+      
       const response = await fetch(`${API_URL}/goals`, {
         method: 'POST',
         headers,
@@ -157,7 +172,14 @@ class GoalService {
       });
 
       const data = await this.handleResponse(response);
-      return data.data as Goal;
+      const updatedGoal = data.data as Goal;
+      
+      // Log if this is a putts goal
+      if (updatedGoal.category === 'putts') {
+        console.log(`[API] Goal created for putts goal: ID: ${updatedGoal._id}, Value: ${updatedGoal.currentValue}, Achieved: ${updatedGoal.achieved}`);
+      }
+      
+      return updatedGoal;
     } catch (error) {
       console.error('Error creating goal:', error);
       throw error;
@@ -177,7 +199,14 @@ class GoalService {
       });
 
       const data = await this.handleResponse(response);
-      return data.data as Goal;
+      const updatedGoal = data.data as Goal;
+      
+      // Log if this is a putts goal
+      if (updatedGoal.category === 'putts') {
+        console.log(`[API] Goal toggle response for putts goal: ID: ${updatedGoal._id}, Value: ${updatedGoal.currentValue}, Achieved: ${updatedGoal.achieved}`);
+      }
+      
+      return updatedGoal;
     } catch (error) {
       console.error('Error updating goal:', error);
       throw error;
@@ -190,21 +219,40 @@ class GoalService {
   async toggleGoalAchievement(
     goalId: string, 
     achieved: boolean, 
-    completedAtStr?: string
+    completedAtStr?: string,
+    currentValue?: number
   ): Promise<Goal> {
     try {
       const headers = await this.getHeaders();
+      
+      // Prepare request body
+      const requestBody: any = { 
+        achieved,
+        completedAt: achieved ? completedAtStr || new Date().toISOString() : undefined
+      };
+      
+      // Include currentValue if provided (important for preserving stats)
+      if (currentValue !== undefined) {
+        requestBody.currentValue = currentValue;
+      }
+      
+      console.log(`Toggling goal ${goalId} achievement to ${achieved} with currentValue:`, currentValue);
+      
       const response = await fetch(`${API_URL}/goals/${goalId}/achievement`, {
         method: 'PATCH',
         headers,
-        body: JSON.stringify({ 
-          achieved,
-          completedAt: achieved ? completedAtStr || new Date().toISOString() : undefined
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await this.handleResponse(response);
-      return data.data as Goal;
+      const updatedGoal = data.data as Goal;
+      
+      // Log if this is a putts goal
+      if (updatedGoal.category === 'putts') {
+        console.log(`[API] Goal toggle response for putts goal: ID: ${updatedGoal._id}, Value: ${updatedGoal.currentValue}, Achieved: ${updatedGoal.achieved}`);
+      }
+      
+      return updatedGoal;
     } catch (error) {
       console.error('Error toggling goal achievement:', error);
       throw error;

@@ -1,5 +1,5 @@
 // src/screens/rounds/AddRound/index.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { ScrollView, Alert, Modal, View, Text, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,6 +7,7 @@ import { MainStackParamList } from '../../../config/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRounds } from '../../../hooks/useRounds';
 import { useGoals } from '../../../hooks/useGoals';
+import { GoalsContext } from '../../../components/providers/GoalsProvider';
 import { Course } from 'shared';
 import { CourseSearch } from '../../../components/course/CourseSearch';
 import { RoundDetails } from '../../../components/round/RoundDetails';
@@ -19,7 +20,8 @@ type Props = NativeStackScreenProps<MainStackParamList, 'AddRound'>;
 export function AddRoundScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { createRound } = useRounds();
-  const { newlyAchievedGoals, setNewlyAchievedGoals } = useGoals();
+  const goalsContext = useContext(GoalsContext);
+  const { newlyAchievedGoals, setNewlyAchievedGoals } = goalsContext || useGoals();
   
   // Course selection state
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -103,7 +105,8 @@ export function AddRoundScreen({ navigation }: Props) {
   
   // Check for newly achieved goals after round submission
   useEffect(() => {
-    if (newlyAchievedGoals.length > 0) {
+    if (newlyAchievedGoals && newlyAchievedGoals.length > 0) {
+      console.log(`Found ${newlyAchievedGoals.length} newly achieved goals, showing celebration!`);
       showAchievementCelebration();
     }
   }, [newlyAchievedGoals]);
@@ -124,11 +127,27 @@ export function AddRoundScreen({ navigation }: Props) {
         notes: notes.trim() || undefined
       });
 
-      // Check if we have newly achieved goals
-      if (newlyAchievedGoals.length > 0) {
-        // The celebration will show from the useEffect
+      // Check if we have newly achieved goals after adding round
+      // We need to manually check since the goals may have been updated by the round
+      if (goalsContext?.checkAndFindAchievedGoals) {
+        const achievedGoals = goalsContext.checkAndFindAchievedGoals();
+        console.log(`Checking goals after round submission, found ${achievedGoals.length} newly achieved goals`);
+        
+        if (achievedGoals.length > 0) {
+          // Let the useEffect handle showing the celebration  
+        } else {
+          // No achievements, show regular success and navigate back
+          Alert.alert(
+            'Success',
+            'Round added successfully',
+            [{
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }]
+          );
+        }
       } else {
-        // Show regular success message and navigate back
+        // Fallback if context is not available
         Alert.alert(
           'Success',
           'Round added successfully',

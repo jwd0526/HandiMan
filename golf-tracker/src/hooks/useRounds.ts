@@ -1,8 +1,9 @@
 // src/hooks/useRounds.ts
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useContext } from 'react';
 import { Round, CreateRoundInput } from 'shared';
 import { roundService } from '../services/api/rounds';
 import { useAuth } from './useAuth';
+import { GoalsContext } from '../components/providers/GoalsProvider';
 
 interface UseRounds {
   rounds: Round[];
@@ -15,6 +16,7 @@ interface UseRounds {
 
 export function useRounds(): UseRounds {
   const { user } = useAuth();
+  const goalsContext = useContext(GoalsContext);
   const [rounds, setRounds] = useState<Round[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,14 @@ export function useRounds(): UseRounds {
       setRounds(prev => [newRound, ...prev].sort((a, b) => 
         new Date(b.date).getTime() - new Date(a.date).getTime()
       ));
+      
+      // Check goals achievement after adding a new round
+      if (goalsContext?.checkAndFindAchievedGoals) {
+        console.log('Checking goals after adding new round...');
+        setTimeout(() => {
+          goalsContext.checkAndFindAchievedGoals();
+        }, 500); // Small delay to ensure rounds state is updated
+      }
 
       return newRound;
     } catch (error) {

@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   tabContainer: {
+    marginTop: 10,
     flexDirection: 'row',
     marginHorizontal: 16,
     marginBottom: 12,
@@ -198,12 +199,11 @@ export const styles = StyleSheet.create({
   achievedBadge: {
     position: 'absolute',
     right: -5,
-    top: -5,
+    top: '50%',
     backgroundColor: '#4CAF50',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    transform: [{ rotate: '15deg' }],
   },
   achievedBadgeText: {
     color: 'white',

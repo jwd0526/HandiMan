@@ -76,7 +76,18 @@ class RoundService {
       const response = await fetch(url.toString(), { method: 'GET', headers });
       const data = await this.handleResponse(response);
       console.log('Received rounds data:', data.data ? 'count: ' + (Array.isArray(data.data) ? data.data.length : 0) : 'No data');
-      return Array.isArray(data.data) ? data.data : [];
+      
+      // Process rounds data to check for putts values
+      const rounds = Array.isArray(data.data) ? data.data : [];
+      
+      // Log the putts values from each round to help debug
+      console.log('[ROUNDS DATA] Putts values in rounds:');
+      const puttsValues = rounds.map(round => round.putts).filter(p => p !== undefined);
+      const sortedPutts = [...puttsValues].sort((a, b) => a - b);
+      console.log(`All putts values: ${puttsValues.join(', ')}`);
+      console.log(`Best (lowest) putts value: ${sortedPutts[0] || 'None'}`);
+      
+      return rounds;
     } catch (error) {
       console.error('Error in getUserRounds:', error);
       throw error;

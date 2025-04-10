@@ -9,6 +9,7 @@ export interface User extends BaseDocument {
   name?: string;
   savedCourses: Course[];
   rounds: Round[];
+  goals?: Goal[];
 }
 
 export interface CreateUserInput {

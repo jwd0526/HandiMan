@@ -1,6 +1,6 @@
 // src/components/providers/AuthProvider.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, CreateUserInput } from 'shared';
+import { User, CreateUserInput, Goal } from 'shared';
 import { authService } from '../../services/api/auth';
 import { secureStorage, STORAGE_KEYS } from '../../services/storage/secureStorage';
 
@@ -8,6 +8,9 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
+  goals: Goal[]; // Add goals to the context
+  activeGoals: Goal[]; // Filtered active goals
+  completedGoals: Goal[]; // Filtered completed goals
   login: (email: string, password: string) => Promise<void>;
   signup: (userData: CreateUserInput) => Promise<void>;
   logout: () => Promise<void>;
@@ -17,8 +20,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Computed properties for goals
+  const activeGoals = goals.filter(goal => !goal.achieved);
+  const completedGoals = goals.filter(goal => goal.achieved);
 
   useEffect(() => {
     checkAuthStatus();
@@ -31,21 +39,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (!token) {
         setUser(null);
+        setGoals([]);
         setLoading(false);
         return;
       }
 
       const validatedUser = await authService.validateToken(token);
       if (validatedUser) {
+        console.log('Setting validated user:', validatedUser);
         setUser(validatedUser);
+        
+        // Set goals if they exist in the user object
+        if (validatedUser.goals) {
+          console.log('Setting goals from auth:', validatedUser.goals);
+          setGoals(validatedUser.goals);
+        }
       } else {
         await secureStorage.remove(STORAGE_KEYS.AUTH_TOKEN);
         setUser(null);
+        setGoals([]);
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
       setError('Failed to check authentication status');
       setUser(null);
+      setGoals([]);
     } finally {
       setLoading(false);
     }
@@ -66,6 +84,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         console.log('Setting user state:', user);
         setUser(user);
+        
+        // Set goals if they exist in the user object
+        if (user.goals) {
+          console.log('Setting goals from login:', user.goals);
+          setGoals(user.goals);
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -89,6 +113,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (user) {
         setUser(user);
+        
+        // Initialize empty goals for new user
+        setGoals(user.goals || []);
       }
     } catch (error) {
       console.error('Signup error:', error);
@@ -108,6 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await secureStorage.remove(STORAGE_KEYS.AUTH_TOKEN);
       
       setUser(null);
+      setGoals([]);
     } catch (error) {
       console.error('Logout error:', error);
       setError(error instanceof Error ? error.message : 'Failed to logout');
@@ -121,6 +149,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     loading,
     error,
+    goals,
+    activeGoals,
+    completedGoals,
     login,
     signup,
     logout

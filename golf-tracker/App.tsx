@@ -22,6 +22,7 @@ import { AuthStackParamList, MainStackParamList } from './src/config/navigation'
 // Context Providers
 import { AuthProvider, useAuthContext } from './src/components/providers/AuthProvider';
 import { CoursesProvider } from './src/components/providers/CourseProvider';
+import { GoalsProvider } from './src/components/providers/GoalsProvider';
 
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -82,8 +83,10 @@ export default function App() {
     <SafeAreaProvider>
       <AuthProvider>
         <CoursesProvider>
-          <StatusBar style="auto" />
-          <Navigation />
+          <GoalsProvider>
+            <StatusBar style="auto" />
+            <Navigation />
+          </GoalsProvider>
         </CoursesProvider>
       </AuthProvider>
     </SafeAreaProvider>
