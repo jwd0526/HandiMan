@@ -64,8 +64,13 @@ class GoalService {
     return data;
   }
   
-  // Helper to convert date strings to Date objects
+  // Helper to convert date strings to Date objects if needed
+  // With our updated types, this is technically optional, but it helps
+  // maintain consistency in the client-side objects
   private convertGoalDates(goal: any): Goal {
+    // Only convert if needed - this preserves the client-created Date objects
+    // and only converts server-provided string dates
+    
     // Convert standard date fields
     if (goal.createdAt && typeof goal.createdAt === 'string') {
       goal.createdAt = new Date(goal.createdAt);

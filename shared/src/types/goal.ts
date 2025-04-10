@@ -5,10 +5,10 @@ export interface Goal extends BaseDocument {
   name: string;
   targetValue: number;
   currentValue?: number;
-  targetDate?: Date;
+  targetDate?: Date | string; // Allow both types for flexibility
   category: 'handicap' | 'scoring' | 'fairways' | 'greens' | 'putts' | 'custom';
   achieved: boolean;
-  completedAt?: Date;
+  completedAt?: Date | string; // Allow both types for flexibility
   description?: string;
   addedBy: string;
 }
@@ -16,7 +16,7 @@ export interface Goal extends BaseDocument {
 export interface CreateGoalInput {
   name: string;
   targetValue: number;
-  targetDate?: Date;
+  targetDate?: Date | string; // Allow both types for flexibility
   currentValue?: number;
   category: 'handicap' | 'scoring' | 'fairways' | 'greens' | 'putts' | 'custom';
   description?: string;
