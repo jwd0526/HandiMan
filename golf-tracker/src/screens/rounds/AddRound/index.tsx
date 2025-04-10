@@ -1,22 +1,25 @@
 // src/screens/rounds/AddRound/index.tsx
-import React, { useState } from 'react';
-import { ScrollView, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, Alert, Modal, View, Text, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../../config/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRounds } from '../../../hooks/useRounds';
+import { useGoals } from '../../../hooks/useGoals';
 import { Course } from 'shared';
 import { CourseSearch } from '../../../components/course/CourseSearch';
 import { RoundDetails } from '../../../components/round/RoundDetails';
 import { styles } from './styles';
 import { BackButton } from '../../../components/common/BackButton';
+import { Award } from 'lucide-react-native';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'AddRound'>;
 
 export function AddRoundScreen({ navigation }: Props) {
   const { user } = useAuth();
   const { createRound } = useRounds();
+  const { newlyAchievedGoals, setNewlyAchievedGoals } = useGoals();
   
   // Course selection state
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
@@ -33,6 +36,10 @@ export function AddRoundScreen({ navigation }: Props) {
   // Form state
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
+  
+  // Celebration modal state
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationScale] = useState(new Animated.Value(0));
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
@@ -68,6 +75,39 @@ export function AddRoundScreen({ navigation }: Props) {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Show achievement celebration
+  const showAchievementCelebration = () => {
+    setShowCelebration(true);
+    Animated.sequence([
+      Animated.timing(celebrationScale, {
+        toValue: 1.2,
+        duration: 300,
+        useNativeDriver: true
+      }),
+      Animated.timing(celebrationScale, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true
+      })
+    ]).start(() => {
+      setTimeout(() => {
+        setShowCelebration(false);
+        celebrationScale.setValue(0);
+        // Clear achievements after showing them
+        setNewlyAchievedGoals([]);
+        // Navigate back
+        navigation.goBack();
+      }, 3000);
+    });
+  };
+  
+  // Check for newly achieved goals after round submission
+  useEffect(() => {
+    if (newlyAchievedGoals.length > 0) {
+      showAchievementCelebration();
+    }
+  }, [newlyAchievedGoals]);
+
   const handleSubmit = async () => {
     if (!validateForm() || !user || !selectedCourse) return;
 
@@ -84,14 +124,20 @@ export function AddRoundScreen({ navigation }: Props) {
         notes: notes.trim() || undefined
       });
 
-      Alert.alert(
-        'Success',
-        'Round added successfully',
-        [{
-          text: 'OK',
-          onPress: () => navigation.goBack()
-        }]
-      );
+      // Check if we have newly achieved goals
+      if (newlyAchievedGoals.length > 0) {
+        // The celebration will show from the useEffect
+      } else {
+        // Show regular success message and navigate back
+        Alert.alert(
+          'Success',
+          'Round added successfully',
+          [{
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }]
+        );
+      }
     } catch (error) {
       console.error('Error submitting round:', error);
       Alert.alert(
@@ -100,7 +146,6 @@ export function AddRoundScreen({ navigation }: Props) {
           ? error.message 
           : 'Failed to add round. Please try again.'
       );
-    } finally {
       setLoading(false);
     }
   };
@@ -135,6 +180,44 @@ export function AddRoundScreen({ navigation }: Props) {
           />
         )}
       </ScrollView>
+      
+      {/* Goal achievement celebration modal */}
+      <Modal
+        visible={showCelebration}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.celebrationOverlay}>
+          <Animated.View 
+            style={[
+              styles.celebrationContent,
+              { transform: [{ scale: celebrationScale }] }
+            ]}
+          >
+            <Award size={60} color="#4CAF50" />
+            <Text style={styles.celebrationTitle}>Goal Achieved!</Text>
+            
+            {newlyAchievedGoals.length === 1 ? (
+              <Text style={styles.celebrationText}>
+                Congratulations! You've achieved your goal:
+              </Text>
+            ) : (
+              <Text style={styles.celebrationText}>
+                Congratulations! You've achieved multiple goals:
+              </Text>
+            )}
+            
+            <View style={styles.goalsList}>
+              {newlyAchievedGoals.map(goal => (
+                <View key={goal._id} style={styles.goalItem}>
+                  <Award size={16} color="#4CAF50" />
+                  <Text style={styles.goalItemText}>{goal.name}</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
