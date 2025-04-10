@@ -1,5 +1,5 @@
 // src/screens/rounds/AllRounds/index.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,12 @@ import {
   RefreshControl
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MainStackParamList } from '../../../config/navigation';
 import { Round } from 'shared';
 import { useRounds } from '../../../hooks/useRounds';
-import { ChevronDown, Calendar, Flag, Target } from 'lucide-react-native';
+import { ChevronDown, Calendar, Flag, Target, Watch } from 'lucide-react-native';
 import { styles } from './styles';
 import { BackButton } from '../../../components/common/BackButton';
 
@@ -44,23 +45,33 @@ function RoundCard({ round, onPress }: RoundCardProps) {
       </View>
       
       <View style={styles.roundStats}>
-        <View style={styles.statItem}>
-          <Target size={16} color="#666" />
-          <Text style={styles.statText}>
-            Differential: {round.differential.toFixed(1)}
-          </Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Watch size={16} color="#666" />
+            <Text style={styles.statText}>
+              Differential: {round.differential.toFixed(1)}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Target size={16} color="#666" />
+            <Text style={styles.statText}>
+              {`FIR: ${round.fairways}`}
+            </Text>
+          </View>
         </View>
-        <View style={styles.statItem}>
-          <Flag size={16} color="#666" />
-          <Text style={styles.statText}>
-            {`FIR: ${round.fairways}`}
-          </Text>
-        </View>
-        <View style={styles.statItem}>
-          <Calendar size={16} color="#666" />
-          <Text style={styles.statText}>
-            {`Putts: ${round.putts}`}
-          </Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Flag size={16} color="#666" />
+            <Text style={styles.statText}>
+              {`GIR: ${round.greens}`}
+            </Text>
+          </View>
+          <View style={styles.statItem}>
+            <Calendar size={16} color="#666" />
+            <Text style={styles.statText}>
+              {`Putts: ${round.putts}`}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -80,9 +91,24 @@ export function AllRoundsScreen({ navigation }: Props) {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [showSortOptions, setShowSortOptions] = useState(false);
 
+  // Load rounds when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('AllRounds screen in focus - loading rounds');
+      getUserRounds();
+    }, [getUserRounds])
+  );
+
+  // Initial load
+  useEffect(() => {
+    console.log('AllRounds initial mount - loading rounds');
+    getUserRounds();
+  }, [getUserRounds]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
+      console.log('AllRounds pull-to-refresh - loading rounds');
       await getUserRounds();
     } finally {
       setRefreshing(false);

@@ -63,15 +63,24 @@ class RoundService {
     const headers = await this.getHeaders();
     const url = new URL(`${API_URL}/rounds`);
     
-    url.searchParams.append('userId', userId);
+    // Note: We don't need to add userId as a query param since the server uses the JWT token
+    // to identify the user. But we keep the parameter for API consistency.
+    
     if (options?.limit) url.searchParams.append('limit', options.limit.toString());
     if (options?.offset) url.searchParams.append('offset', options.offset.toString());
     if (options?.sortBy) url.searchParams.append('sortBy', options.sortBy);
     if (options?.sortOrder) url.searchParams.append('sortOrder', options.sortOrder);
 
-    const response = await fetch(url.toString(), { method: 'GET', headers });
-    const data = await this.handleResponse(response);
-    return Array.isArray(data.data) ? data.data : [];
+    try {
+      console.log('Fetching rounds from API:', url.toString());
+      const response = await fetch(url.toString(), { method: 'GET', headers });
+      const data = await this.handleResponse(response);
+      console.log('Received rounds data:', data.data ? 'count: ' + (Array.isArray(data.data) ? data.data.length : 0) : 'No data');
+      return Array.isArray(data.data) ? data.data : [];
+    } catch (error) {
+      console.error('Error in getUserRounds:', error);
+      throw error;
+    }
   }
 
   /**
@@ -99,14 +108,35 @@ class RoundService {
    */
   async deleteRound(roundId: string): Promise<void> {
     const headers = await this.getHeaders();
-    const response = await fetch(`${API_URL}/rounds/${roundId}`, {
-      method: 'DELETE',
-      headers
-    });
+    try {
+      console.log(`Deleting round with ID: ${roundId}`);
+      const response = await fetch(`${API_URL}/rounds/${roundId}`, {
+        method: 'DELETE',
+        headers
+      });
 
-    if (!response.ok) {
+      // Handle non-JSON responses
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error('Non-JSON response received:', await response.text());
+        throw new RoundError('Server returned an invalid response format');
+      }
+
       const data = await response.json();
-      throw new RoundError(data.message || 'Failed to delete round');
+      
+      if (!response.ok) {
+        throw new RoundError(data.message || 'Failed to delete round');
+      }
+      
+      console.log('Round deleted successfully:', data);
+      return;
+    } catch (error) {
+      console.error('Error in deleteRound:', error);
+      if (error instanceof SyntaxError) {
+        // JSON parse error
+        throw new RoundError('Invalid response from server. Please try again later.');
+      }
+      throw error;
     }
   }
 }

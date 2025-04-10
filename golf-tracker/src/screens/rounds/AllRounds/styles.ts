@@ -85,15 +85,16 @@ export const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  roundStats: {
+  statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    minWidth: '45%',
   },
   statText: {
     fontSize: 14,

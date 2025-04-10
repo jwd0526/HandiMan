@@ -7,13 +7,10 @@ export const calculateHandicap = (rounds: Round[]) => {
   const recentRounds = [...rounds]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 20);
-  console.log(recentRounds);
   // Extract and sort differentials
   const difs = recentRounds
     .map((round) => round.differential)
     .sort((a, b) => a - b);
-
-  console.log(difs);
 
   // Calculate handicap based on number of rounds
   switch (difs.length) {
