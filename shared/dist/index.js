@@ -18,3 +18,4 @@ Object.defineProperty(exports, "__esModule", { value: true });
 __exportStar(require("./types/user"), exports);
 __exportStar(require("./types/course"), exports);
 __exportStar(require("./types/round"), exports);
+__exportStar(require("./types/goal"), exports);

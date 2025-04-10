@@ -1,8 +1,7 @@
-// shared/src/types/round.ts
 import { BaseDocument } from './base';
-
+import { Course } from './course';
 export interface Round extends BaseDocument {
-  course: string;
+  course: Course;
   date: Date | string;
   tees: string;
   score: number;
@@ -15,7 +14,7 @@ export interface Round extends BaseDocument {
 }
 
 export interface CreateRoundInput {
-  course: string;
+  course: Course;
   date: Date | string;
   tees: string;
   score: number;
