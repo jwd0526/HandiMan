@@ -17,6 +17,8 @@ export type MainStackParamList = {
   AddCourse: undefined;
   Profile: undefined;
   Settings: undefined;
+  Statistics: undefined;
+  Goals: undefined;
 };
 
 // Root Stack

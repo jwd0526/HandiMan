@@ -1,5 +1,5 @@
 // src/config/constants.ts
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:3000/api';
 
 // Animation durations
 export const ANIMATION = {
