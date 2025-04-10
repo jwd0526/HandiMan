@@ -31,9 +31,15 @@ app.use(cors({
     'http://192.168.1.80:19006',
     'exp://192.168.1.80:19000',
     'exp://192.168.1.80:19001',
+    'http://192.168.1.142:19000',
+    'http://192.168.1.142:19006',
+    'exp://192.168.1.142:19000',
+    'exp://192.168.1.142:19001',
     /^exp:\/\/.*$/,       // All Expo URLs
     /^http:\/\/localhost:.*/, // All localhost URLs
-    /^http:\/\/192\.168\.1\..*/ // All local network IPs
+    /^http:\/\/192\.168\..*/, // All 192.168 local network IPs
+    /^http:\/\/10\..*/, // All 10.x.x.x local network IPs
+    /^http:\/\/172\..*/ // All 172.x.x.x local network IPs
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
@@ -93,7 +99,37 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Start server - Listen on all interfaces to make it accessible over the network
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
+  // Get the local IP address to help with connections
+  const { networkInterfaces } = require('os');
+  const nets = networkInterfaces();
+  const results = Object.create(null);
+  
+  // Find all network interfaces
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip internal and non-IPv4 addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        if (!results[name]) {
+          results[name] = [];
+        }
+        results[name].push(net.address);
+      }
+    }
+  }
+  
   console.log(`Server running on port ${PORT}`);
-  console.log(`Server accessible at http://localhost:${PORT} or http://192.168.1.80:${PORT}`);
+  console.log('Available on:');
+  console.log(`- http://localhost:${PORT} (local only)`);
+  
+  // List all available IP addresses for easy connection
+  for (const name of Object.keys(results)) {
+    for (const ip of results[name]) {
+      console.log(`- http://${ip}:${PORT} (for network access)`);
+    }
+  }
+  
+  console.log('\nTo use with Expo Go, update your .env file:');
+  console.log('EXPO_PUBLIC_API_URL="http://YOUR_IP_ADDRESS:3000/api"\n');
+  console.log('Make sure your phone and laptop are on the same WiFi network');
 });
