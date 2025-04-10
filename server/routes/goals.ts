@@ -1,7 +1,7 @@
 // server/routes/goals.ts
 import express, { Request } from 'express';
 import mongoose from 'mongoose';
-import type { Goal } from 'shared';
+import type { Goal, CreateGoalInput } from 'shared';
 
 // Inline Goal model (since we don't have a separate file yet)
 export interface IGoal {
@@ -12,6 +12,7 @@ export interface IGoal {
   targetDate?: Date;
   category: 'handicap' | 'scoring' | 'fairways' | 'greens' | 'putts' | 'custom';
   achieved: boolean;
+  completedAt?: Date;
   description?: string;
   addedBy: mongoose.Types.ObjectId;
   createdAt: Date;
