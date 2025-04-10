@@ -1,4 +1,7 @@
 // src/config/constants.ts
+// Dynamically determine the API URL for Expo Go development
+// This will try to use the environment variable first, fallback to 192.168.1.80
+// You can update this to your laptop's IP address
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.1.80:3000/api';
 
 // Animation durations
