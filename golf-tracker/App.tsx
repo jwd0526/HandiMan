@@ -13,13 +13,15 @@ import { HomeScreen } from './src/screens/Home';
 import { AddRoundScreen } from './src/screens/rounds/AddRound';
 import { AllRoundsScreen } from './src/screens/rounds/AllRounds';
 import { AddCourseScreen } from './src/screens/course/AddCourse';
+import { StatisticsScreen } from './src/screens/Statistics';
+import { GoalsScreen } from './src/screens/Goals';
 
 // Types
 import { AuthStackParamList, MainStackParamList } from './src/config/navigation';
 
 // Context Providers
 import { AuthProvider, useAuthContext } from './src/components/providers/AuthProvider';
-import { CourseProvider } from './src/components/providers/CourseProvider';
+import { CoursesProvider } from './src/components/providers/CourseProvider';
 
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -54,6 +56,8 @@ const MainNavigator = React.memo(() => {
       <MainStack.Screen name="AddRound" component={AddRoundScreen} />
       <MainStack.Screen name="AllRounds" component={AllRoundsScreen} />
       <MainStack.Screen name="AddCourse" component={AddCourseScreen} />
+      <MainStack.Screen name="Statistics" component={StatisticsScreen} />
+      <MainStack.Screen name="Goals" component={GoalsScreen} />
     </MainStack.Navigator>
   );
 });
@@ -77,10 +81,10 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <CourseProvider>
+        <CoursesProvider>
           <StatusBar style="auto" />
           <Navigation />
-        </CourseProvider>
+        </CoursesProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
