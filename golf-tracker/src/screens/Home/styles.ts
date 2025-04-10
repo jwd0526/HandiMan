@@ -76,12 +76,29 @@ export const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
   },
+  handicapContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+  },
   handicapText: {
     fontSize: 48,
     fontWeight: 'bold',
     color: '#2f95dc',
     textAlign: 'center',
-    marginVertical: 16,
+    marginVertical: 8,
+  },
+  handicapLabel: {
+    fontSize: 16,
+    color: '#666',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  handicapSubtext: {
+    textAlign: 'center',
+    color: '#888',
+    fontSize: 14,
+    marginBottom: 8,
   },
   quickActions: {
     flexDirection: 'row',
@@ -132,11 +149,84 @@ export const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   actionButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  
+  // Modal styles for handicap details
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 8,
+  },
+  handicapExplanation: {
+    marginBottom: 16,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: '#444',
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  differentialsList: {
+    marginVertical: 12,
+  },
+  differentialItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  usedDifferential: {
+    fontWeight: 'bold',
+    color: '#2f95dc',
+  },
+  unusedDifferential: {
+    color: '#666',
+  },
+  courseText: {
+    flex: 1,
+    fontSize: 14,
+  },
+  differentialText: {
+    fontSize: 14,
+    width: 50,
+    textAlign: 'right',
+  },
+  dateText: {
+    fontSize: 12,
+    color: '#888',
+    width: 80,
+    textAlign: 'right',
   },
   noRoundsText: {
     fontSize: 16,

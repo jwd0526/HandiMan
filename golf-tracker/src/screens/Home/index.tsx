@@ -1,12 +1,13 @@
 // src/screens/Home/index.tsx
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert
+  Alert,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,36 +16,53 @@ import { MainStackParamList } from '../../config/navigation';
 import { useAuth } from '../../hooks/useAuth';
 import { useRounds } from '../../hooks/useRounds';
 import { Round } from 'shared';
-import { LogOut, Target, Trophy } from 'lucide-react-native';
+import { LogOut, Target, Trophy, CirclePlus, PieChart, Info } from 'lucide-react-native';
 import { styles } from './styles';
 import { calculateHandicap } from '../../utils/handicap';
 
 type Props = NativeStackScreenProps<MainStackParamList, 'Home'>;
 
-function HandicapCard({ handicap }: { handicap: number }) {
+function HandicapCard({ handicap, rounds, onViewDetails }: { 
+  handicap: number; 
+  rounds: Round[]; 
+  onViewDetails: () => void;
+}) {
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>Current Handicap</Text>
-      <Text style={styles.handicapText}>{handicap.toFixed(1)}</Text>
-      <TouchableOpacity style={styles.actionButton}>
+      <View style={styles.handicapContainer}>
+        <Text style={styles.handicapText}>{handicap.toFixed(1)}</Text>
+      </View>
+      <Text style={styles.handicapSubtext}>
+        Based on {Math.min(rounds.length, 20)} rounds
+      </Text>
+      <TouchableOpacity style={styles.actionButton} onPress={onViewDetails}>
+        <Info size={16} color="#2f95dc" style={{marginRight: 6}} />
         <Text style={styles.actionButtonText}>View Details</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
-function QuickActions({ onAddRound }: { onAddRound: () => void }) {
+function QuickActions({ onAddRound, onViewStats, onViewGoals }: { 
+  onAddRound: () => void;
+  onViewStats: () => void;
+  onViewGoals: () => void;
+}) {
   return (
     <View style={styles.quickActions}>
       <TouchableOpacity style={styles.quickActionButton} onPress={onAddRound}>
-        {/* <Golf size={24} color="#2f95dc" /> */}
+        <CirclePlus size={24} color="#2f95dc" />
         <Text style={styles.quickActionText}>New Round</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.quickActionButton}>
-        <Target size={24} color="#2f95dc" />
+      <TouchableOpacity 
+        style={styles.quickActionButton}
+        onPress={onViewStats}
+      >
+        <PieChart size={24} color="#2f95dc" />
         <Text style={styles.quickActionText}>Statistics</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={styles.quickActionButton}>
+      <TouchableOpacity style={styles.quickActionButton} onPress={onViewGoals}>
         <Trophy size={24} color="#2f95dc" />
         <Text style={styles.quickActionText}>Goals</Text>
       </TouchableOpacity>
@@ -105,6 +123,7 @@ function TipCard() {
 export function HomeScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
   const { rounds, loading, error, getUserRounds } = useRounds();
+  const [showHandicapDetails, setShowHandicapDetails] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -121,6 +140,117 @@ export function HomeScreen({ navigation }: Props) {
       Alert.alert('Error', 'Failed to log out. Please try again.');
     }
   };
+
+  // Calculate handicap from rounds
+  const handicap = calculateHandicap(rounds);
+
+  // Calculate which differentials are used for handicap
+  const getHandicapDifferentials = useCallback(() => {
+    if (rounds.length < 3) return { usedDifferentials: [], allDifferentials: [] };
+    
+    // Get the last 20 rounds and their differentials
+    const recentRounds = [...rounds]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20);
+    
+    // Sort differentials for calculation
+    const sortedDifferentials = [...recentRounds]
+      .sort((a, b) => a.differential - b.differential);
+    
+    // Determine how many differentials are used based on total rounds
+    let usedCount = 0;
+    if (sortedDifferentials.length <= 4) {
+      usedCount = 1;
+    } else if (sortedDifferentials.length <= 6) {
+      usedCount = 2;
+    } else if (sortedDifferentials.length <= 8) {
+      usedCount = 2;
+    } else if (sortedDifferentials.length <= 11) {
+      usedCount = 3;
+    } else if (sortedDifferentials.length <= 14) {
+      usedCount = 4;
+    } else if (sortedDifferentials.length <= 16) {
+      usedCount = 5;
+    } else if (sortedDifferentials.length <= 18) {
+      usedCount = 6;
+    } else if (sortedDifferentials.length === 19) {
+      usedCount = 7;
+    } else if (sortedDifferentials.length === 20) {
+      usedCount = 8;
+    }
+    
+    // Get the differentials used in calculation
+    const usedDifferentials = sortedDifferentials.slice(0, usedCount);
+    
+    return {
+      usedDifferentials,
+      allDifferentials: recentRounds
+    };
+  }, [rounds]);
+
+  const renderHandicapDetailsModal = () => (
+    <Modal
+      visible={showHandicapDetails}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowHandicapDetails(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Handicap Details</Text>
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={() => setShowHandicapDetails(false)}
+            >
+              <Text style={{ color: '#2f95dc', fontSize: 16 }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView>
+            <View style={styles.handicapExplanation}>
+              <Text style={styles.explanationText}>
+                Your handicap index is {handicap.toFixed(1)}, calculated using the 
+                lowest {getHandicapDifferentials().usedDifferentials.length} differentials 
+                from your last {Math.min(rounds.length, 20)} rounds.
+              </Text>
+              <Text style={styles.explanationText}>
+                A differential is calculated as: (Score - Course Rating) × 113 ÷ Slope Rating
+              </Text>
+              <Text style={styles.explanationText}>
+                The highlighted differentials below are used in your handicap calculation.
+              </Text>
+            </View>
+            
+            <View style={styles.differentialsList}>
+              {getHandicapDifferentials().allDifferentials.map((round, index) => {
+                const isUsed = getHandicapDifferentials().usedDifferentials.some(r => r._id === round._id);
+                return (
+                  <View key={round._id} style={styles.differentialItem}>
+                    <Text style={[
+                      styles.courseText,
+                      isUsed ? styles.usedDifferential : styles.unusedDifferential
+                    ]}>
+                      {typeof round.course === 'object' ? round.course.name : 'Unknown Course'}
+                    </Text>
+                    <Text style={[
+                      styles.differentialText,
+                      isUsed ? styles.usedDifferential : styles.unusedDifferential
+                    ]}>
+                      {round.differential.toFixed(1)}
+                    </Text>
+                    <Text style={styles.dateText}>
+                      {new Date(round.date).toLocaleDateString()}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (loading) {
     return (
@@ -148,11 +278,9 @@ export function HomeScreen({ navigation }: Props) {
     );
   }
 
-  // Calculate handicap from rounds
-  const handicap = calculateHandicap(rounds);
-
   return (
     <SafeAreaView style={styles.container}>
+      {renderHandicapDetailsModal()}
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header Section */}
         <View style={styles.header}>
@@ -169,10 +297,18 @@ export function HomeScreen({ navigation }: Props) {
         </View>
 
         {/* Handicap Card */}
-        <HandicapCard handicap={handicap} />
+        <HandicapCard 
+          handicap={handicap} 
+          rounds={rounds} 
+          onViewDetails={() => setShowHandicapDetails(true)} 
+        />
 
         {/* Quick Actions */}
-        <QuickActions onAddRound={() => navigation.navigate('AddRound')} />
+        <QuickActions 
+          onAddRound={() => navigation.navigate('AddRound')} 
+          onViewStats={() => navigation.navigate('Statistics')}
+          onViewGoals={() => navigation.navigate('Goals')}
+        />
 
         {/* Recent Rounds */}
         <RecentRounds
