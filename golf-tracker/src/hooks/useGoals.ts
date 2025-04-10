@@ -75,8 +75,8 @@ export const useGoals = () => {
       ...goalData,
       achieved: false,
       currentValue: initialCurrentValue,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
     
     // Add to UI immediately at the beginning of the list (active goals first)
@@ -150,7 +150,7 @@ export const useGoals = () => {
           ...goal, 
           achieved,
           // Add completedAt date when marking as achieved, remove when marking as not achieved
-          completedAt: achieved ? now.toISOString() : undefined
+          completedAt: achieved ? now : undefined
         } : goal
       ));
       

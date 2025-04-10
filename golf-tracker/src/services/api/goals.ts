@@ -51,7 +51,36 @@ class GoalService {
     if (!response.ok) {
       throw new GoalError(data.message || 'Goal operation failed');
     }
+    
+    // Convert date strings to Date objects for proper typing
+    if (Array.isArray(data.data)) {
+      // Handle array of goals
+      data.data = data.data.map(this.convertGoalDates);
+    } else if (data.data) {
+      // Handle single goal
+      data.data = this.convertGoalDates(data.data);
+    }
+    
     return data;
+  }
+  
+  // Helper to convert date strings to Date objects
+  private convertGoalDates(goal: any): Goal {
+    // Convert standard date fields
+    if (goal.createdAt && typeof goal.createdAt === 'string') {
+      goal.createdAt = new Date(goal.createdAt);
+    }
+    if (goal.updatedAt && typeof goal.updatedAt === 'string') {
+      goal.updatedAt = new Date(goal.updatedAt);
+    }
+    // Convert goal-specific date fields
+    if (goal.completedAt && typeof goal.completedAt === 'string') {
+      goal.completedAt = new Date(goal.completedAt);
+    }
+    if (goal.targetDate && typeof goal.targetDate === 'string') {
+      goal.targetDate = new Date(goal.targetDate);
+    }
+    return goal;
   }
 
   /**
@@ -156,7 +185,7 @@ class GoalService {
   async toggleGoalAchievement(
     goalId: string, 
     achieved: boolean, 
-    completedAt?: string
+    completedAtStr?: string
   ): Promise<Goal> {
     try {
       const headers = await this.getHeaders();
@@ -165,7 +194,7 @@ class GoalService {
         headers,
         body: JSON.stringify({ 
           achieved,
-          completedAt: achieved ? completedAt || new Date().toISOString() : undefined
+          completedAt: achieved ? completedAtStr || new Date().toISOString() : undefined
         })
       });
 

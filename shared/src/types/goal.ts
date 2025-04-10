@@ -8,7 +8,7 @@ export interface Goal extends BaseDocument {
   targetDate?: Date;
   category: 'handicap' | 'scoring' | 'fairways' | 'greens' | 'putts' | 'custom';
   achieved: boolean;
-  completedAt?: string;
+  completedAt?: Date;
   description?: string;
   addedBy: string;
 }
